@@ -10,7 +10,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
 )
 
 // Blob is a blob.Blob that is stored in a fs.FS.

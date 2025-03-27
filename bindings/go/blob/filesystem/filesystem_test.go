@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob/filesystem"
 )
 
 func TestNewFS(t *testing.T) {

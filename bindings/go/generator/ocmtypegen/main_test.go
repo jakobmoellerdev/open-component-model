@@ -46,14 +46,14 @@ func TestReadModulePath(t *testing.T) {
 	path := filepath.Join("..", "go.mod")
 	modulePath, err := readModulePath(path)
 	require.NoError(t, err)
-	assert.Equal(t, "ocm.software/open-component-model/bindings/go/generator", modulePath)
+	assert.Equal(t, "github.com/jakobmoellerdev/open-component-model/bindings/go/generator", modulePath)
 }
 
 func TestGetImportPath(t *testing.T) {
 	path := filepath.Join("test")
 	importPath, err := getImportPath(path)
 	require.NoError(t, err)
-	assert.Equal(t, "ocm.software/open-component-model/bindings/go/generator/ocmtypegen/test", importPath)
+	assert.Equal(t, "github.com/jakobmoellerdev/open-component-model/bindings/go/generator/ocmtypegen/test", importPath)
 }
 
 func TestFindGoPackages(t *testing.T) {

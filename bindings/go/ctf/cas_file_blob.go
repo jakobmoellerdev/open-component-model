@@ -4,8 +4,8 @@ import (
 	"io"
 	"sync"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob/filesystem"
 )
 
 // CASFileBlob represents a content-addressable storage (CAS) file blob.

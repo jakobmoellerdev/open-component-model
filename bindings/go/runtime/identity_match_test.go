@@ -3,7 +3,7 @@ package runtime_test
 import (
 	"testing"
 
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 func TestIdentityMatchesPath(t *testing.T) {

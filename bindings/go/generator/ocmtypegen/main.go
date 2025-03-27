@@ -27,7 +27,7 @@ const (
 	// This package contains the `Type` struct that is used in the generated code.
 	// The generator will ensure that this import is included in the generated file,
 	// if the package is not the same as the runtime package.
-	runtimeImport = "ocm.software/open-component-model/bindings/go/runtime"
+	runtimeImport = "github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 	// runtimeTypeFieldName is the name of the field in the struct that holds the type information.
 	// This field must be of type `runtime.Type` for the generator to process the struct.
 	runtimeTypeFieldName = "Type"

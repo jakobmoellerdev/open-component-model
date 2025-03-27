@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob/filesystem"
 )
 
 func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {

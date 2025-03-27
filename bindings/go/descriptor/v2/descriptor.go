@@ -6,7 +6,7 @@ import (
 	"maps"
 	"time"
 
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 const (

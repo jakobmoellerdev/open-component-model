@@ -1,7 +1,7 @@
 package v2
 
 import (
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 // LocalBlobAccessType is the access type of blob local to a component.
@@ -12,7 +12,7 @@ const (
 )
 
 // LocalBlob describes the access for a local blob.
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen:interfaces=github.com/jakobmoellerdev/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 type LocalBlob struct {

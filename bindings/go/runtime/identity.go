@@ -33,7 +33,7 @@ const (
 // Identity is a map that represents a set of attributes that uniquely identity
 // arbitrary resources. It is used in various places in Open Component Model to uniquely
 // identity objects such as resources or components.
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen:interfaces=github.com/jakobmoellerdev/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type Identity map[string]string
 

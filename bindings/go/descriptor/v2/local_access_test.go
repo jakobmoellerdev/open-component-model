@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	descriptorv2 "github.com/jakobmoellerdev/open-component-model/bindings/go/descriptor/v2"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 func TestLocalBlob_Struct(t *testing.T) {

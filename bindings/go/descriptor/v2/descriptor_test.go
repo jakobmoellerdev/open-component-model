@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	descriptorv2 "github.com/jakobmoellerdev/open-component-model/bindings/go/descriptor/v2"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 const jsonData = `

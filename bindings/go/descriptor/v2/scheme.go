@@ -1,7 +1,7 @@
 package v2
 
 import (
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 var Scheme = runtime.NewScheme()

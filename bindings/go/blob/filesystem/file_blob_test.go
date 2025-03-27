@@ -9,8 +9,8 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob/filesystem"
 )
 
 func TestBlob_ReadCloser(t *testing.T) {

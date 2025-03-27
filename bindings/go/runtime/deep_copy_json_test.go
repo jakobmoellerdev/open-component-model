@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 func TestDeepCopyJSON(t *testing.T) {

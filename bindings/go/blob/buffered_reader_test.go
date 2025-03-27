@@ -8,7 +8,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
 )
 
 func TestBufferedReader(t *testing.T) {

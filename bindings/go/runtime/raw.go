@@ -13,7 +13,7 @@ import (
 // struct, and Typed in your internal struct. You also need to register your
 // various plugin types.
 //
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen:interfaces=github.com/jakobmoellerdev/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type Raw struct {
 	Type `json:"type"`

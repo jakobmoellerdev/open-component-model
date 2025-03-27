@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
 )
 
 const DefaultFileIOBufferSize = 1 << 20 // 1 MiB

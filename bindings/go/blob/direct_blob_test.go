@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	. "ocm.software/open-component-model/bindings/go/blob"
+	. "github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
 )
 
 func Test_ReadCloserReturnsReader(t *testing.T) {

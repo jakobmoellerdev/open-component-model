@@ -1,7 +1,7 @@
 package test
 
 import (
-	"ocm.software/open-component-model/bindings/go/runtime"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/runtime"
 )
 
 // +k8s:deepcopy-gen=true

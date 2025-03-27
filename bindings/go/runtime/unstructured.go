@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 )
 
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen:interfaces=github.com/jakobmoellerdev/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type Unstructured struct {
 	Data map[string]interface{}

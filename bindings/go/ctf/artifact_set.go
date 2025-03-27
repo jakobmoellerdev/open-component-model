@@ -16,7 +16,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ociimagespec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
 )
 
 // ArtifactSetMediaType is the definition of the ArtifactSet Media Type in old format CTFs

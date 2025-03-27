@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob/filesystem"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/ctf/index/v1"
 )
 
 // FileFormat represents the format of a CTF.

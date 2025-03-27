@@ -15,7 +15,7 @@ import (
 	ociimagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/ctf"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/ctf"
 )
 
 // Test_CTF_Basic_ReadOnly_Compatibility tests the compatibility of CTF archives

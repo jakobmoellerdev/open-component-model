@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/go/blob
+module github.com/jakobmoellerdev/open-component-model/bindings/go/blob
 
 go 1.24.1
 

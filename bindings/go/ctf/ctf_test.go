@@ -9,10 +9,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
 
-	"ocm.software/open-component-model/bindings/go/ctf"
-	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/ctf"
+	v1 "github.com/jakobmoellerdev/open-component-model/bindings/go/ctf/index/v1"
 )
 
 func Test_CTF_ReadWrite(t *testing.T) {

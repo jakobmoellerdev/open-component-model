@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/ctf"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/blob"
+	"github.com/jakobmoellerdev/open-component-model/bindings/go/ctf"
 )
 
 func Test_Archive(t *testing.T) {
