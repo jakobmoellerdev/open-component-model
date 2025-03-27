@@ -85,10 +85,6 @@ jobs:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            ${{ matrix.module }}
-            .github/config/golangci.yml
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -114,9 +110,6 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            ${{ matrix.module }}
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
