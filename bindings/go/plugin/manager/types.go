@@ -1,42 +1,22 @@
 package manager
 
 import (
-	"encoding/json"
-
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
-	ReadWriteComponentVersionRepositoryCapability = "readWriteComponentVersionRepository"
-	ReadComponentVersionRepositoryCapability      = "readComponentVersionRepository"
-	WriteComponentVersionRepositoryCapability     = "writeComponentVersionRepository"
-	ReadResourceRepositoryCapability              = "readResourceRepository"
-	WriteResourceRepositoryCapability             = "writeResourceRepository"
-	CredentialPluginCapability                    = "credentialPlugin"           //nolint: gosec // isn't a hardcoded credential
-	CredentialRepositoryPluginCapability          = "credentialRepositoryPlugin" //nolint: gosec // isn't a hardcoded credential
+	ReadComponentVersionRepositoryCapability  = "readComponentVersionRepository"
+	WriteComponentVersionRepositoryCapability = "writeComponentVersionRepository"
+	ReadResourceRepositoryCapability          = "readResourceRepository"
+	WriteResourceRepositoryCapability         = "writeResourceRepository"
+	CredentialPluginCapability                = "credentialPlugin"           // nolint: gosec // isn't a hardcoded credential
+	CredentialRepositoryPluginCapability      = "credentialRepositoryPlugin" // nolint: gosec // isn't a hardcoded credential
 )
 
 type Location struct {
 	LocationType `json:"type"`
 	Value        string `json:"value"`
-}
-
-type Repository struct {
-	runtime.Typed `json:",inline"`
-}
-
-func (a *Repository) UnmarshalJSON(data []byte) error {
-	raw := &runtime.Raw{}
-	if err := json.Unmarshal(data, raw); err != nil {
-		return err
-	}
-	a.Typed = raw
-	return nil
-}
-
-func (a *Repository) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.Typed)
 }
 
 type LocationType string
@@ -54,23 +34,23 @@ const (
 	LocationTypeLocalFile LocationType = "localFile"
 )
 
-type GetComponentVersionRequest struct {
+type GetComponentVersionRequest[T runtime.Typed] struct {
 	// The Location of the Component Version
-	Repository *Repository `json:"repository"`
+	Repository T `json:"repository"`
 	// The Component Name
 	Name string `json:"name"`
 	// The Component Version
 	Version string `json:"version"`
 }
 
-type PostComponentVersionRequest struct {
-	Repository *Repository            `json:"repository"`
+type PostComponentVersionRequest[T runtime.Typed] struct {
+	Repository T                      `json:"repository"`
 	Descriptor *descriptor.Descriptor `json:"descriptor"`
 }
 
-type GetLocalResourceRequest struct {
+type GetLocalResourceRequest[T runtime.Typed] struct {
 	// The Repository Specification where the Component Version is stored
-	Repository *Repository `json:"repository"`
+	Repository T `json:"repository"`
 	// The Component Name
 	Name string `json:"name"`
 	// The Component Version
@@ -83,9 +63,9 @@ type GetLocalResourceRequest struct {
 	TargetLocation Location `json:"targetLocation"`
 }
 
-type PostLocalResourceRequest struct {
+type PostLocalResourceRequest[T runtime.Typed] struct {
 	// The Repository Specification where the Component Version should be stored
-	Repository *Repository `json:"repository"`
+	Repository T `json:"repository"`
 	// The Component Name
 	Name string `json:"name"`
 	// The Component Version
@@ -109,7 +89,7 @@ type Capability struct {
 	// Capability is the name of the capability for example OCMComponentVersionRepository.
 	Capability string `json:"capability"`
 	// Type defines the type name that this plugin supports.
-	Type string `json:"type"`
+	Type runtime.Type `json:"type"`
 }
 
 // Capabilities are defined per plugin type. The plugin type is derived from the capability

@@ -39,7 +39,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
+	"ocm.software/open-component-model/bindings/go/oci/resolver"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"

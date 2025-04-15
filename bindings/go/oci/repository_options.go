@@ -10,7 +10,7 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
-	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
+	"ocm.software/open-component-model/bindings/go/oci/memory"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )

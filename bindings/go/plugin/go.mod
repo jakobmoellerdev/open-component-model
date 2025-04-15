@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/plugins
+module ocm.software/open-component-model/bindings/go/plugin
 
 go 1.24.1
 
@@ -16,12 +16,15 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250410115029-6dcf800db82b // indirect
 	oras.land/oras-go/v2 v2.5.0 // indirect

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"oras.land/oras-go/v2/registry/remote"
 
-	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
+	"ocm.software/open-component-model/bindings/go/oci/resolver"
 )
 
 func TestNewURLPathResolver(t *testing.T) {

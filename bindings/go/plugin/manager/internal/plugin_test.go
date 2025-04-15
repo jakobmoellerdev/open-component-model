@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	_ "ocm.software/open-component-model/plugins/manager/internal"
+	_ "ocm.software/open-component-model/bindings/go/plugin/manager/internal"
 
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/plugins/manager"
 )
 
 func TestInternallyImportedPlugin(t *testing.T) {

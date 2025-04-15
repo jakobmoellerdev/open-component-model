@@ -12,9 +12,9 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/client/sdk"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/plugins/manager"
-	"ocm.software/open-component-model/plugins/plugin"
 )
 
 // GetComponentVersion implements component version fetching.
@@ -84,7 +84,7 @@ func main() {
 	}
 	r := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-	ocmPlugin := plugin.NewPlugin(r, conf)
+	ocmPlugin := sdk.NewPlugin(r, conf)
 	if err := ocmPlugin.RegisterHandlers(capabilityBuilder.GetHandlers()...); err != nil {
 		log.Fatal(err)
 	}

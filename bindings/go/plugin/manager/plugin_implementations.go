@@ -33,6 +33,53 @@ const (
 	DownloadComponentVersion = "/component-version/download"
 )
 
+func NewTypedRepositoryPlugin[T runtime.Typed](base *RepositoryPlugin) *TypedRepositoryPlugin[T] {
+	return &TypedRepositoryPlugin[T]{base}
+}
+
+type TypedRepositoryPlugin[T runtime.Typed] struct {
+	base *RepositoryPlugin
+}
+
+func (r *TypedRepositoryPlugin[T]) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials Attributes) error {
+	return r.base.GetLocalResource(ctx, GetLocalResourceRequest[runtime.Typed]{
+		Repository:     request.Repository,
+		Name:           request.Name,
+		Version:        request.Version,
+		Identity:       request.Identity,
+		TargetLocation: request.TargetLocation,
+	}, credentials)
+}
+
+func (r *TypedRepositoryPlugin[T]) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials Attributes) (*descriptor.Resource, error) {
+	return r.base.AddLocalResource(ctx, PostLocalResourceRequest[runtime.Typed]{
+		Repository:       request.Repository,
+		Name:             request.Name,
+		Version:          request.Version,
+		ResourceLocation: request.ResourceLocation,
+		Resource:         request.Resource,
+	}, credentials)
+}
+func (r *TypedRepositoryPlugin[T]) Ping(ctx context.Context) error {
+	return r.base.Ping(ctx)
+}
+
+func (r *TypedRepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials Attributes) error {
+	return r.base.AddComponentVersion(ctx, PostComponentVersionRequest[runtime.Typed]{
+		Repository: request.Repository,
+		Descriptor: request.Descriptor,
+	}, credentials)
+}
+
+func (r *TypedRepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials Attributes) (*descriptor.Descriptor, error) {
+	req := GetComponentVersionRequest[runtime.Typed]{
+		Name:       request.Name,
+		Version:    request.Version,
+		Repository: request.Repository,
+	}
+	return r.base.GetComponentVersion(ctx, req, credentials)
+}
+
 type RepositoryPlugin struct {
 	ID string
 
@@ -47,10 +94,10 @@ type RepositoryPlugin struct {
 
 // This plugin implements all the given contracts.
 var (
-	_ ReadRepositoryPluginContract  = &RepositoryPlugin{}
-	_ WriteRepositoryPluginContract = &RepositoryPlugin{}
-	_ ReadResourcePluginContract    = &RepositoryPlugin{}
-	_ WriteResourcePluginContract   = &RepositoryPlugin{}
+	_ ReadOCMRepositoryPluginContract[runtime.Typed]  = &RepositoryPlugin{}
+	_ WriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
+	_ ReadResourcePluginContract                      = &RepositoryPlugin{}
+	_ WriteResourcePluginContract                     = &RepositoryPlugin{}
 )
 
 func NewRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config) *RepositoryPlugin {
@@ -74,7 +121,7 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest, credentials Attributes) error {
+func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[runtime.Typed], credentials Attributes) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
@@ -87,7 +134,7 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request Post
 	return nil
 }
 
-func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest, credentials Attributes) (*descriptor.Descriptor, error) {
+func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[runtime.Typed], credentials Attributes) (*descriptor.Descriptor, error) {
 	response := &descriptor.Descriptor{}
 	var params []KV
 	addParam := func(k, v string) {
@@ -113,7 +160,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetC
 	return response, nil
 }
 
-func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLocalResourceRequest, credentials Attributes) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[runtime.Typed], credentials Attributes) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -127,7 +174,7 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLoc
 	return response, nil
 }
 
-func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLocalResourceRequest, credentials Attributes) error {
+func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[runtime.Typed], credentials Attributes) error {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})

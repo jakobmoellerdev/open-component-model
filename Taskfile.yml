@@ -41,15 +41,15 @@ includes:
     optional: true
     taskfile: ./bindings/go/dag/Taskfile.yml
     dir: ./bindings/go/dag
+  bindings/go/plugin:
+    optional: true
+    taskfile: ./bindings/go/plugin/Taskfile.yml
+    dir: ./bindings/go/plugin
+
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
     dir: ./cli
-  plugins:
-    optional: true
-    taskfile: ./plugins/Taskfile.yml
-    dir: ./plugins
-
 vars:
   GO_MODULES:
     sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'

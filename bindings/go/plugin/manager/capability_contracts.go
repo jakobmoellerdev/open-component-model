@@ -4,6 +4,7 @@ import (
 	"context"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // PluginBase is a capability shared by all plugins.
@@ -21,22 +22,22 @@ type KV struct {
 	Value string
 }
 
-// ReadRepositoryPluginContract is a plugin type that can deal with repositories
-type ReadRepositoryPluginContract interface {
+// ReadOCMRepositoryPluginContract is a plugin type that can deal with repositories
+type ReadOCMRepositoryPluginContract[T runtime.Typed] interface {
 	PluginBase
-	GetComponentVersion(ctx context.Context, request GetComponentVersionRequest, credentials Attributes) (*descriptor.Descriptor, error)
-	GetLocalResource(ctx context.Context, request GetLocalResourceRequest, credentials Attributes) error
+	GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials Attributes) (*descriptor.Descriptor, error)
+	GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials Attributes) error
 }
 
-type WriteRepositoryPluginContract interface {
+type WriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	PluginBase
-	AddLocalResource(ctx context.Context, request PostLocalResourceRequest, credentials Attributes) (*descriptor.Resource, error)
-	AddComponentVersion(ctx context.Context, request PostComponentVersionRequest, credentials Attributes) error
+	AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials Attributes) (*descriptor.Resource, error)
+	AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials Attributes) error
 }
 
-type ReadWriteRepositoryPluginContract interface {
-	ReadRepositoryPluginContract
-	WriteRepositoryPluginContract
+type ReadWriteOCMRepositoryPluginContract[T runtime.Typed] interface {
+	ReadOCMRepositoryPluginContract[T]
+	WriteOCMRepositoryPluginContract[T]
 }
 
 type ResourcePluginContract interface {

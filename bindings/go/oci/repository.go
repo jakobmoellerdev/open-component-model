@@ -25,8 +25,8 @@ import (
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
-	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
+	"ocm.software/open-component-model/bindings/go/oci/memory"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
@@ -221,7 +221,7 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
-	done := log.Operation(ctx, "add local resource",
+	done := log.Operation(ctx, "get component version",
 		slog.String("component", component),
 		slog.String("version", version))
 	defer done(err)

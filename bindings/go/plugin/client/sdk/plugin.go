@@ -1,4 +1,4 @@
-package plugin
+package sdk
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"ocm.software/open-component-model/plugins/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
 type CleanupFunc func(ctx context.Context) error

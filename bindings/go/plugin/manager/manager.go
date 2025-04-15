@@ -22,9 +22,9 @@ const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
 type PluginType string
 
 var (
-	TransformationPlugin PluginType = "transformation"
-	TransferPlugin       PluginType = "transfer"
-	CredentialPlugin     PluginType = "credential"
+	TransformationPlugin             PluginType = "transformation"
+	ComponentVersionRepositoryPlugin PluginType = "componentVersionRepository"
+	CredentialPlugin                 PluginType = "credential"
 )
 
 // Plugin represents a connected plugin
@@ -41,9 +41,9 @@ type Plugin struct {
 type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
 	// plugin manager to locate a required plugin.
-	TransferRegistry       *TransferRegistry
-	TransformationRegistry *TransformationRegistry
-	CredentialRegistry     *CredentialRegistry
+	ComponentVersionRepositoryRegistry *ComponentVersionRepositoryRegistry
+	TransformationRegistry             *TransformationRegistry
+	CredentialRegistry                 *CredentialRegistry
 
 	mu     sync.Mutex
 	logger *slog.Logger
@@ -59,9 +59,9 @@ type PluginManager struct {
 // the passed ctx is used for all plugins.
 func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
 	return &PluginManager{
-		TransformationRegistry: NewTransformationRegistry(),
-		TransferRegistry:       NewTransferRegistry(),
-		CredentialRegistry:     NewCredentialRegistry(),
+		TransformationRegistry:             NewTransformationRegistry(),
+		ComponentVersionRepositoryRegistry: NewTransferRegistry(),
+		CredentialRegistry:                 NewCredentialRegistry(),
 
 		baseCtx: ctx,
 		logger:  logger,
@@ -148,7 +148,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		plugin.config = *conf
 
 		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.path), "capabilities") //nolint: gosec // G204 does not apply
+		cmd := exec.CommandContext(ctx, cleanPath(plugin.path), "capabilities") // nolint: gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr
 
@@ -168,7 +168,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		}
 
 		// Create a command that can then be managed.
-		pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
+		pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.path), "--config", string(serialized)) // nolint: gosec // G204 does not apply
 		pluginCmd.Stdout = os.Stdout
 		pluginCmd.Stderr = os.Stdout
 		pluginCmd.Cancel = func() error {
@@ -182,9 +182,9 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		// For all plugin types of this binary, add the plugin to the right registry
 		for pType := range plugin.capabilities {
 			switch pType {
-			case TransferPlugin:
+			case ComponentVersionRepositoryPlugin:
 				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
-				if err := pm.TransferRegistry.AddPlugin(plugin, caps); err != nil {
+				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, caps); err != nil {
 					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}
 			case CredentialPlugin:
@@ -207,7 +207,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	var errs error
 
 	errs = errors.Join(errs,
-		pm.TransferRegistry.Shutdown(ctx),
+		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
 		pm.TransformationRegistry.Shutdown(ctx),
 		pm.CredentialRegistry.Shutdown(ctx),
 	)
@@ -218,7 +218,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 func determineConnectionLocation(plugin *Plugin) (_ string, err error) {
 	switch plugin.config.Type {
 	case TCP:
-		listener, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
+		listener, err := net.Listen("tcp", ":0") // nolint: gosec // G102: only does it temporarily to find an empty address
 		if err != nil {
 			return "", err
 		}

@@ -96,9 +96,12 @@ func (c *CapabilityBuilder) RegisterReadWriteComponentVersionRepositoryCapabilit
 	}
 
 	// Setup capabilities
-	c.currentCapabilities.Capabilities[TransferPlugin] = append(c.currentCapabilities.Capabilities[TransferPlugin], Capability{
-		Capability: ReadWriteComponentVersionRepositoryCapability,
-		Type:       typ.GetType().String(),
+	c.currentCapabilities.Capabilities[ComponentVersionRepositoryPlugin] = append(c.currentCapabilities.Capabilities[ComponentVersionRepositoryPlugin], Capability{
+		Capability: ReadComponentVersionRepositoryCapability,
+		Type:       typ.GetType(),
+	}, Capability{
+		Capability: WriteComponentVersionRepositoryCapability,
+		Type:       typ.GetType(),
 	})
 
 	// Setup handlers
@@ -152,7 +155,7 @@ func DownloadComponentVersionHandlerFunc(f GetComponentVersionFn, typ runtime.Ty
 
 func UploadComponentVersionHandlerFunc(f PostComponentVersionFn, typ runtime.Typed) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		req, err := DecodeJSONRequestBody[PostComponentVersionRequest](writer, request)
+		req, err := DecodeJSONRequestBody[PostComponentVersionRequest[*runtime.Raw]](writer, request)
 		if err != nil {
 			NewError(err, http.StatusBadRequest).Write(writer)
 			return
@@ -163,7 +166,7 @@ func UploadComponentVersionHandlerFunc(f PostComponentVersionFn, typ runtime.Typ
 			NewError(err, http.StatusBadRequest).Write(writer)
 			return
 		}
-		if err := Scheme.Convert(req.Repository.Typed, typ); err != nil {
+		if err := Scheme.Convert(req.Repository, typ); err != nil {
 			NewError(err, http.StatusBadRequest).Write(writer)
 			return
 		}
