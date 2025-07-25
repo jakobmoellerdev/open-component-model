@@ -17,6 +17,10 @@
   },
   packageRules: [
     {
+      "matchDatasources": ["golang-version"],
+      "rangeStrategy": "bump"
+    },
+    {
       "matchCategories": [
         "golang"
       ],
