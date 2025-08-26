@@ -89,6 +89,8 @@ jobs:
             kubernetes/controller
             .github/workflows/kubernetes-controller.yml
             Taskfile.yml
+      - name: Set up docker
+        uses: docker/setup-docker-action@v4
       - name: Docker Login
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
@@ -96,6 +98,5 @@ jobs:
           username: ocmbot[ocm]
           password: ${{ steps.generate_token.outputs.token }}
       - name: Build and Push
-        run: task kubernetes/controller:docker-buildx
-        env:
-          IMG: ghcr.io/${{ github.repository }}/kubernetes/controller:latest
+        run: task kubernetes/controller:docker-buildx \
+          CONTROLLER_IMG=ghcr.io/${{ github.repository }}/kubernetes/controller:latest
