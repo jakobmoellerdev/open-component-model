@@ -12,11 +12,15 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 env:
   cache_archive: renovate_cache.tar.gz
   cache_dir: /tmp/renovate/cache/renovate/repository
   cache_key: renovate-cache
+  RENOVATE_CONFIG_FILE: .github/renovate.json5
 
 jobs:
   renovate:
@@ -24,13 +28,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - name: Generate token
-        id: generate_token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
 
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact
@@ -54,11 +51,28 @@ jobs:
           sudo chown -R 12021:0 /tmp/renovate/
           ls -R "$cache_dir" || true
 
-      - name: Self-hosted Renovate
+      - name: Setup validation script
+        if: ${{ github.event_name == 'pull_request' }}
+        run: echo "renovate-config-validator --strict" > validate.sh && chmod +x validate.sh
+      - name: Validate Renovate Config
+        if: ${{ github.event_name == 'pull_request' }}
         uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
         with:
-          configurationFile: .github/config/renovate.json5
-          token: ${{ steps.generate_token.outputs.token }}
+          docker-cmd-file: validate.sh
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - if: ${{ github.event_name != 'pull_request' && github.repository_owner == 'open-component-model' }}
+        id: generate_token
+        uses: actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b # v2.1.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+      - name: Run
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
+        with:
+          token: ${{ steps.generate_token.outputs.token != '' && steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
         env:
           RENOVATE_PLATFORM_COMMIT: 'true'
           RENOVATE_REPOSITORIES: "${{ github.repository }}"
