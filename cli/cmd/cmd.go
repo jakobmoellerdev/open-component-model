@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/cmd/explorer"
 
 	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
@@ -56,5 +57,6 @@ func New() *cobra.Command {
 	cmd.AddCommand(add.New())
 	cmd.AddCommand(version.New())
 	cmd.AddCommand(download.New())
+	cmd.AddCommand(explorer.New())
 	return cmd
 }
