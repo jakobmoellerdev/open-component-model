@@ -88,8 +88,7 @@ tasks:
           relation: local
           input:
             type: file
-            # TODO(jakobmoellerdev) fix loading this as a native tarball
-            # mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+            mediaType: application/vnd.ocm.software.oci.layout.v1+tar
             path: {{ .TASKFILE_DIR }}/tmp/oci/cli.tar
         EOF
 
