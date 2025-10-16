@@ -52,7 +52,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.branch }}
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          persist-credentials: false
 
       - name: Compute new RC version
         id: compute
@@ -85,8 +84,8 @@ jobs:
               try { return execSync(cmd).toString().trim(); } catch { return ""; }
             };
 
-            const latestStable = run(`git tag --list '${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
-            const latestRC = run(`git tag --list '${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
+            const latestStable = run(`git tag --list 'refs/tags/${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
+            const latestRC = run(`git tag --list 'refs/tags/${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
 
             let version = latestStable ? latestStable.replace(prefix, "").replace(/^v/, "") : `${baseVersion}.0`;
             const [major, minor, patchRaw] = version.split(".").map(x => parseInt(x, 10));
@@ -178,10 +177,10 @@ jobs:
             const { execSync } = require("child_process");
             const tag = process.env.TAG;
             const msg = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
-            try { execSync(`git rev-parse ${tag}`); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
+            try { execSync(`git rev-parse "refs/tags/${tag}"`); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
             require("fs").writeFileSync(".tagmsg", msg);
             execSync(`git tag -a "${tag}" -F .tagmsg`);
-            execSync(`git push origin "${tag}"`);
+            execSync(`git push origin "refs/tags/${tag}"`);
             core.setOutput("pushed","true");
             core.info(`✅ Created RC tag ${tag}`);
 
