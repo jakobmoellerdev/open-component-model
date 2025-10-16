@@ -84,8 +84,9 @@ jobs:
               try { return execSync(cmd).toString().trim(); } catch { return ""; }
             };
 
-            const latestStable = run(`git tag --list 'refs/tags/${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
-            const latestRC = run(`git tag --list 'refs/tags/${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
+            // fix: remove refs/tags/ prefix from patterns
+            const latestStable = run(`git tag --list '${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
+            const latestRC = run(`git tag --list '${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
 
             let version = latestStable ? latestStable.replace(prefix, "").replace(/^v/, "") : `${baseVersion}.0`;
             const [major, minor, patchRaw] = version.split(".").map(x => parseInt(x, 10));
@@ -125,11 +126,14 @@ jobs:
         env:
           TAG: ${{ steps.compute.outputs.new_tag }}
         with:
+          github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          config: ${{ env.COMPONENT_PATH }}/cliff.toml
           args: |
             --include-path "${{ env.COMPONENT_PATH }}/**" \
             --tag "${{ env.TAG }}" \
             -o "$RUNNER_TEMP/CHANGELOG.md" \
-            --github-token ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+            --use-branch-tags \
+            --latest
 
       - name: Summarize changelog
         id: summarize
@@ -145,24 +149,45 @@ jobs:
               : "No changelog.";
             const encoded = Buffer.from(log).toString("base64");
             core.setOutput("changelog_b64", encoded);
-            core.info(`Changelog for ${process.env.TAG}:\n${log}`);
             await core.summary.addRaw(log).write();
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
           version: 3.x
+          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Build and verify CTF
         run: |
           task cli:generate/ctf VERSION=${{ steps.compute.outputs.base_version }}
           task cli:verify/ctf
 
-      - name: Setup git identity
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+      - name: Get GitHub App User ID
+        if: ${{ steps.app-token.outputs.token }}
+        id: get-user-id
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
-          git config --global user.name "${{ github.actor }}"
-          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      - id: committer
+        name: Determine Committer used for pushing Tag
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: | 
+          if [ -n "${{ steps.app-token.outputs.token }}" ]; then 
+            echo "name=${{ steps.app-token.outputs.app-slug }}[bot]" >> "$GITHUB_OUTPUT" 
+            echo "email=${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com" >> "$GITHUB_OUTPUT" 
+          else 
+            echo "name=${{ github.actor }}" >> "$GITHUB_OUTPUT" 
+            echo "email=${{ github.actor }}@users.noreply.github.com" >> "$GITHUB_OUTPUT" 
+          fi
+      - name: Setup git config
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: | 
+          git config --global user.name "${{ steps.committer.outputs.name }}" 
+          git config --global user.email "${{ steps.committer.outputs.email }}"
 
       - name: Create and push RC tag
         if: ${{ github.event.inputs.dry_run == 'false' }}
@@ -185,6 +210,7 @@ jobs:
             core.info(`✅ Created RC tag ${tag}`);
 
       - name: Create GitHub prerelease
+        id: create_release
         if: ${{ steps.tag.outputs.pushed == 'true' }}
         uses: actions/github-script@v8
         env:
@@ -203,34 +229,65 @@ jobs:
               body, prerelease: true
             });
             core.setOutput("upload_url", res.data.upload_url);
-
       - name: Upload CLI artifacts
         if: ${{ steps.create_release.outputs.upload_url }}
         uses: actions/github-script@v8
         env:
           UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
-          ARTIFACT_DIRS: cli/tmp/bin
+          ARTIFACTS: ${{ env.COMPONENT_PATH }}/tmp/bin,${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar
         with:
           github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           script: |
             const fs = require("fs");
             const path = require("path");
-            const dirs = process.env.ARTIFACT_DIRS.split(",").map(d => d.trim());
-            for (const dir of dirs) {
-              if (!fs.existsSync(dir)) continue;
-              for (const f of fs.readdirSync(dir)) {
-                const file = path.join(dir, f);
-                if (fs.lstatSync(file).isSymbolicLink()) continue;
-                const data = fs.readFileSync(file);
-                await github.request({
-                  method: "POST",
-                  url: process.env.UPLOAD_URL,
-                  headers: {
-                    "content-type": "application/octet-stream",
-                    "content-disposition": `attachment; filename=${f}`,
-                  },
-                  data
-                });
-                core.info(`Uploaded ${f}`);
+      
+            const items = process.env.ARTIFACTS.split(",").map(d => d.trim()).filter(Boolean);
+            const template = process.env.UPLOAD_URL;
+      
+            const uploadFile = async (file) => {
+              if (!fs.existsSync(file)) {
+                core.info(`File ${file} not found, skipping.`);
+                return;
+              }
+              if (fs.lstatSync(file).isSymbolicLink()) {
+                core.info(`Skipping symlink ${file}`);
+                return;
+              }
+      
+              const name = path.basename(file);
+              const data = fs.readFileSync(file);
+              const uploadUrl = template.replace("{?name,label}", `?name=${encodeURIComponent(name)}`);
+      
+              core.info(`Uploading ${file} → ${uploadUrl}`);
+      
+              await github.request({
+                method: "POST",
+                url: uploadUrl,
+                headers: {
+                  "content-type": "application/octet-stream",
+                  "content-length": data.length,
+                },
+                data,
+              });
+      
+              core.info(`Uploaded ${file}`);
+            };
+      
+            for (const item of items) {
+              if (!fs.existsSync(item)) {
+                core.info(`Path ${item} does not exist, skipping.`);
+                continue;
+              }
+      
+              const stat = fs.lstatSync(item);
+              if (stat.isDirectory()) {
+                const files = fs.readdirSync(item);
+                for (const f of files) {
+                  await uploadFile(path.join(item, f));
+                }
+              } else if (stat.isFile()) {
+                await uploadFile(item);
+              } else {
+                core.info(`Skipping ${item}, not a file or directory.`);
               }
             }
