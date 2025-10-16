@@ -1,0 +1,237 @@
+name: Create CLI Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to cut to, must match regex releases/v0.[0-9]+"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform dry run without pushing tags"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  release-cli:
+    environment:
+      name: ocm-release
+    env:
+      COMPONENT_PATH: cli
+    name: Create Release Candidate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate Branch
+        id: validate-branch
+        uses: actions/github-script@v8
+        env:
+          TARGET_BRANCH: ${{ github.event.inputs.branch }}
+        with:
+          script: |
+            const target = process.env.TARGET_BRANCH;
+            const regex = /^releases\/v0\.[0-9]+$/;
+            if (!regex.test(target)) {
+              core.setFailed(`Invalid branch name '${target}'. Must match '${regex}'`);
+            }
+
+      - name: Generate App Token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          permission-contents: write
+        continue-on-error: true
+
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Compute new RC version
+        id: compute
+        uses: actions/github-script@v8
+        env:
+          BRANCH: ${{ github.event.inputs.branch }}
+          COMPONENT_PATH: ${{ env.COMPONENT_PATH }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require("child_process");
+            const fs = require("fs");
+            const branch = process.env.BRANCH;
+            const path = process.env.COMPONENT_PATH || ".";
+            const prefix = `${path}/v`;
+
+            if (!fs.existsSync(`${path}/go.mod`)) {
+              core.setFailed(`No go.mod found in ${path}`);
+              return;
+            }
+
+            const branchMatch = branch.match(/^releases\/v(0\.\d+)/);
+            if (!branchMatch) {
+              core.setFailed(`Branch '${branch}' missing base version`);
+              return;
+            }
+            const baseVersion = branchMatch[1];
+
+            const run = (cmd) => {
+              try { return execSync(cmd).toString().trim(); } catch { return ""; }
+            };
+
+            const latestStable = run(`git tag --list '${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
+            const latestRC = run(`git tag --list '${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
+
+            let version = latestStable ? latestStable.replace(prefix, "").replace(/^v/, "") : `${baseVersion}.0`;
+            const [major, minor, patchRaw] = version.split(".").map(x => parseInt(x, 10));
+            let [maj, min, pat] = [major, minor, patchRaw];
+            let bump = "none";
+            let rc = 1;
+
+            if (latestStable && (!latestRC || run(`printf '%s\n%s\n' '${latestStable}' '${latestRC}' | sort -V | tail -n1`) === latestStable)) {
+              bump = "patch";
+              pat++;
+              rc = 1;
+              core.info(`Last tag was stable (${latestStable}), bumping patch.`);
+            } else if (latestRC) {
+              const rcMatch = latestRC.match(/-rc\.(\d+)$/);
+              if (rcMatch) rc = parseInt(rcMatch[1]) + 1;
+              core.info(`Continuing RC sequence after ${latestRC}.`);
+            } else {
+              core.info("No previous tags found, starting with .0.");
+              bump = "none";
+              pat = 0;
+              rc = 1;
+            }
+
+            const base = `${maj}.${min}.${pat}`;
+            const newVersion = `${base}-rc.${rc}`;
+            const newTag = `${prefix}${newVersion}`;
+
+            core.setOutput("new_tag", newTag);
+            core.setOutput("new_version", newVersion);
+            core.setOutput("base_version", base);
+            core.info(`🆕 Next RC tag: ${newTag}`);
+            core.info(`🔧 Build version (without RC): ${base}`);
+
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        env:
+          TAG: ${{ steps.compute.outputs.new_tag }}
+        with:
+          args: |
+            --include-path "${{ env.COMPONENT_PATH }}/**" \
+            --tag "${{ env.TAG }}" \
+            -o "$RUNNER_TEMP/CHANGELOG.md" \
+            --github-token ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Summarize changelog
+        id: summarize
+        uses: actions/github-script@v8
+        env:
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
+          TAG: ${{ steps.compute.outputs.new_tag }}
+        with:
+          script: |
+            const fs = require("fs");
+            const log = fs.existsSync(process.env.CHANGELOG_FILE)
+              ? fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim()
+              : "No changelog.";
+            const encoded = Buffer.from(log).toString("base64");
+            core.setOutput("changelog_b64", encoded);
+            core.info(`Changelog for ${process.env.TAG}:\n${log}`);
+            await core.summary.addRaw(log).write();
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Build and verify CTF
+        run: |
+          task cli:generate/ctf VERSION=${{ steps.compute.outputs.base_version }}
+          task cli:verify/ctf
+
+      - name: Setup git identity
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create and push RC tag
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        id: tag
+        uses: actions/github-script@v8
+        env:
+          TAG: ${{ steps.compute.outputs.new_tag }}
+          CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require("child_process");
+            const tag = process.env.TAG;
+            const msg = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
+            try { execSync(`git rev-parse ${tag}`); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
+            require("fs").writeFileSync(".tagmsg", msg);
+            execSync(`git tag -a "${tag}" -F .tagmsg`);
+            execSync(`git push origin "${tag}"`);
+            core.setOutput("pushed","true");
+            core.info(`✅ Created RC tag ${tag}`);
+
+      - name: Create GitHub prerelease
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        uses: actions/github-script@v8
+        env:
+          TAG: ${{ steps.compute.outputs.new_tag }}
+          CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = process.env.TAG;
+            const body = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
+            const res = await github.rest.repos.createRelease({
+              owner, repo, tag_name: tag,
+              name: `CLI ${tag.split("/")[1]}`,
+              body, prerelease: true
+            });
+            core.setOutput("upload_url", res.data.upload_url);
+
+      - name: Upload CLI artifacts
+        if: ${{ steps.create_release.outputs.upload_url }}
+        uses: actions/github-script@v8
+        env:
+          UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
+          ARTIFACT_DIRS: cli/tmp/bin
+        with:
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const dirs = process.env.ARTIFACT_DIRS.split(",").map(d => d.trim());
+            for (const dir of dirs) {
+              if (!fs.existsSync(dir)) continue;
+              for (const f of fs.readdirSync(dir)) {
+                const file = path.join(dir, f);
+                if (fs.lstatSync(file).isSymbolicLink()) continue;
+                const data = fs.readFileSync(file);
+                await github.request({
+                  method: "POST",
+                  url: process.env.UPLOAD_URL,
+                  headers: {
+                    "content-type": "application/octet-stream",
+                    "content-disposition": `attachment; filename=${f}`,
+                  },
+                  data
+                });
+                core.info(`Uploaded ${f}`);
+              }
+            }

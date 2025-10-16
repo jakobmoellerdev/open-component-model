@@ -28,7 +28,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate
-        run: task cli:generate/ctf
+        run: task cli:generate/ctf VERSION=${{ inputs.version }}
       - name: Verify
         run: task cli:verify/ctf
           
