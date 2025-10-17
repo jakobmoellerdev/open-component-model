@@ -64,7 +64,8 @@ jobs:
             --tag "${{ env.TAG }}" \
             -o "$RUNNER_TEMP/CHANGELOG.md" \
             --use-branch-tags \
-            --latest
+            --latest \
+            --unreleased
 
       - name: Summarize changelog
         id: summarize
