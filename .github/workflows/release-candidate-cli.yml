@@ -15,30 +15,26 @@ on:
 
 jobs:
   release-cli:
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
     environment:
       name: ocm-release
     env:
+      REGISTRY: ghcr.io
       COMPONENT_PATH: cli
     name: Create Release Candidate
     runs-on: ubuntu-latest
     steps:
-      - name: Generate App Token
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
-          permission-contents: write
-          permission-packages: write
-        continue-on-error: true
-
       - name: Checkout Repository
         uses: actions/checkout@v5
         with:
           sparse-checkout: ${{ env.COMPONENT_PATH }}
           fetch-depth: 0
           ref: ${{ github.event.inputs.branch }}
-          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compute new RC version
         id: compute
@@ -47,7 +43,7 @@ jobs:
           BRANCH: ${{ github.event.inputs.branch }}
           COMPONENT_PATH: ${{ env.COMPONENT_PATH }}
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { execSync } = require("child_process");
             const fs = require("fs");
@@ -113,7 +109,7 @@ jobs:
         env:
           TAG: ${{ steps.compute.outputs.new_tag }}
         with:
-          github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           config: ${{ env.COMPONENT_PATH }}/cliff.toml
           args: |
             --include-path "${{ env.COMPONENT_PATH }}/**" \
@@ -144,7 +140,7 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: 3.x
-          repo-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and verify CTF
         run: |
@@ -155,28 +151,15 @@ jobs:
         uses: actions/attest-build-provenance@v3
         continue-on-error: true
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: ${{ env.COMPONENT_PATH }}/tmp/bin/ocm-*
-
-      - name: Get GitHub App User ID
-        if: ${{ steps.app-token.outputs.token }}
-        id: get-user-id
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-        run: |
-          echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
 
       - id: committer
         name: Determine Committer used for pushing Tag
         if: ${{ github.event.inputs.dry_run == 'false' }}
-        run: | 
-          if [ -n "${{ steps.app-token.outputs.token }}" ]; then 
-            echo "name=${{ steps.app-token.outputs.app-slug }}[bot]" >> "$GITHUB_OUTPUT" 
-            echo "email=${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com" >> "$GITHUB_OUTPUT" 
-          else 
-            echo "name=${{ github.actor }}" >> "$GITHUB_OUTPUT" 
-            echo "email=${{ github.actor }}@users.noreply.github.com" >> "$GITHUB_OUTPUT" 
-          fi
+        run: |
+          echo "name=${{ github.actor }}" >> "$GITHUB_OUTPUT" 
+          echo "email=${{ github.actor }}@users.noreply.github.com" >> "$GITHUB_OUTPUT"
       - name: Setup git config
         if: ${{ github.event.inputs.dry_run == 'false' }}
         run: | 
@@ -191,7 +174,7 @@ jobs:
           TAG: ${{ steps.compute.outputs.new_tag }}
           CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { execSync } = require("child_process");
             const tag = process.env.TAG;
@@ -211,7 +194,7 @@ jobs:
           TAG: ${{ steps.compute.outputs.new_tag }}
           CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -230,7 +213,7 @@ jobs:
           UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
           ARTIFACTS: ${{ env.COMPONENT_PATH }}/tmp/bin,${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar
         with:
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require("fs");
             const path = require("path");
@@ -293,23 +276,23 @@ jobs:
         if: ${{ steps.tag.outputs.pushed == 'true' }}
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ steps.committer.outputs.name }}
-          password: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push OCI layout to GHCR
         id: push-oci-layout
         if: ${{ steps.tag.outputs.pushed == 'true' }}
         run: |
           oras cp \
             --from-oci-layout "${{ github.workspace }}/${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar:${{ steps.compute.outputs.base_version }}" \
-            "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
-          echo "digest=$(oras resolve "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}")" >> "$GITHUB_OUTPUT"
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
+          echo "digest=$(oras resolve "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}")" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation for OCI Image
         uses: actions/attest-build-provenance@v3
         continue-on-error: true
         with:
           subject-digest: ${{ steps.push-oci-layout.outputs.digest }}
-          subject-name: "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
-          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          subject-name: "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           push-to-registry: true
