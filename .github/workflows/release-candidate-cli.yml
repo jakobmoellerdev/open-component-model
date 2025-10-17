@@ -44,7 +44,7 @@ jobs:
           version_format: "${major}.${minor}.${patch}-rc.${increment}"
           bump_each_commit: false
           enable_prerelease_mode: true
-          version_from_branch: true
+          version_from_branch: "/releases\/v([0-9]+.[0-9]+$)$/"
           change_path: ${{ env.COMPONENT_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
