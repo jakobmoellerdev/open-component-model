@@ -43,8 +43,8 @@ jobs:
           tag_prefix: "${{ env.COMPONENT_PATH }}/v"
           enable_prerelease_mode: true
           version_format: "${major}.${minor}.${patch}-rc.${increment}"
-          bump_each_commit: 'true'
           version_from_branch: true
+          debug: 'true'
           minor_pattern: '/$^/' # even for minor changes, we never bump on a release branch
           major_pattern: '/$^/' # even for major changes, we never bump on a release branch
           change_path: ${{ env.COMPONENT_PATH }}
