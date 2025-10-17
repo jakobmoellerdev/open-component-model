@@ -21,21 +21,7 @@ jobs:
       COMPONENT_PATH: cli
     name: Create Release Candidate
     runs-on: ubuntu-latest
-
     steps:
-      - name: Validate Branch
-        id: validate-branch
-        uses: actions/github-script@v8
-        env:
-          TARGET_BRANCH: ${{ github.event.inputs.branch }}
-        with:
-          script: |
-            const target = process.env.TARGET_BRANCH;
-            const regex = /^releases\/v0\.[0-9]+$/;
-            if (!regex.test(target)) {
-              core.setFailed(`Invalid branch name '${target}'. Must match '${regex}'`);
-            }
-
       - name: Generate App Token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -43,6 +29,7 @@ jobs:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
           permission-contents: write
+          permission-packages: write
         continue-on-error: true
 
       - name: Checkout Repository
@@ -163,6 +150,13 @@ jobs:
         run: |
           task cli:generate/ctf VERSION=${{ steps.compute.outputs.base_version }}
           task cli:verify/ctf
+
+      - name: Generate artifact attestation for binaries
+        uses: actions/attest-build-provenance@v3
+        continue-on-error: true
+        with:
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          subject-path: ${{ env.COMPONENT_PATH }}/tmp/bin/ocm-*
 
       - name: Get GitHub App User ID
         if: ${{ steps.app-token.outputs.token }}
@@ -303,8 +297,19 @@ jobs:
           username: ${{ steps.committer.outputs.name }}
           password: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
       - name: Push OCI layout to GHCR
+        id: push-oci-layout
         if: ${{ steps.tag.outputs.pushed == 'true' }}
         run: |
           oras cp \
             --from-oci-layout "${{ github.workspace }}/${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar:${{ steps.compute.outputs.base_version }}" \
             "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
+          echo "digest=$(oras resolve "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}")" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation for OCI Image
+        uses: actions/attest-build-provenance@v3
+        continue-on-error: true
+        with:
+          subject-digest: ${{ steps.push-oci-layout.outputs.digest }}
+          subject-name: "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          push-to-registry: true
