@@ -38,76 +38,22 @@ jobs:
 
       - name: Compute new RC version
         id: compute
-        uses: actions/github-script@v8
-        env:
-          BRANCH: ${{ github.event.inputs.branch }}
-          COMPONENT_PATH: ${{ env.COMPONENT_PATH }}
+        uses: PaulHatch/semantic-version@b1025b26f28ad1d2467be696105655770801877c
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { execSync } = require("child_process");
-            const fs = require("fs");
-            const branch = process.env.BRANCH;
-            const path = process.env.COMPONENT_PATH || ".";
-            const prefix = `${path}/v`;
-
-            if (!fs.existsSync(`${path}/go.mod`)) {
-              core.setFailed(`No go.mod found in ${path}`);
-              return;
-            }
-
-            const branchMatch = branch.match(/^releases\/v(0\.\d+)/);
-            if (!branchMatch) {
-              core.setFailed(`Branch '${branch}' missing base version`);
-              return;
-            }
-            const baseVersion = branchMatch[1];
-
-            const run = (cmd) => {
-              try { return execSync(cmd).toString().trim(); } catch { return ""; }
-            };
-
-            // fix: remove refs/tags/ prefix from patterns
-            const latestStable = run(`git tag --list '${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
-            const latestRC = run(`git tag --list '${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
-
-            let version = latestStable ? latestStable.replace(prefix, "").replace(/^v/, "") : `${baseVersion}.0`;
-            const [major, minor, patchRaw] = version.split(".").map(x => parseInt(x, 10));
-            let [maj, min, pat] = [major, minor, patchRaw];
-            let bump = "none";
-            let rc = 1;
-
-            if (latestStable && (!latestRC || run(`printf '%s\n%s\n' '${latestStable}' '${latestRC}' | sort -V | tail -n1`) === latestStable)) {
-              bump = "patch";
-              pat++;
-              rc = 1;
-              core.info(`Last tag was stable (${latestStable}), bumping patch.`);
-            } else if (latestRC) {
-              const rcMatch = latestRC.match(/-rc\.(\d+)$/);
-              if (rcMatch) rc = parseInt(rcMatch[1]) + 1;
-              core.info(`Continuing RC sequence after ${latestRC}.`);
-            } else {
-              core.info("No previous tags found, starting with .0.");
-              bump = "none";
-              pat = 0;
-              rc = 1;
-            }
-
-            const base = `${maj}.${min}.${pat}`;
-            const newVersion = `${base}-rc.${rc}`;
-            const newTag = `${prefix}${newVersion}`;
-
-            core.setOutput("new_tag", newTag);
-            core.setOutput("new_version", newVersion);
-            core.setOutput("base_version", base);
-            core.info(`🆕 Next RC tag: ${newTag}`);
-            core.info(`🔧 Build version (without RC): ${base}`);
+          tag_prefix: "${{ env.COMPONENT_PATH }}/v"
+          version_format: "${major}.${minor}.${patch}-rc.${increment}"
+          bump_each_commit: false
+          enable_prerelease_mode: true
+          version_from_branch: true
+          change_path: ${{ env.COMPONENT_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate changelog with git-cliff
         uses: orhun/git-cliff-action@v4
         id: git-cliff
         env:
-          TAG: ${{ steps.compute.outputs.new_tag }}
+          TAG: ${{ steps.compute.outputs.version_tag }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           config: ${{ env.COMPONENT_PATH }}/cliff.toml
@@ -123,7 +69,7 @@ jobs:
         uses: actions/github-script@v8
         env:
           CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
-          TAG: ${{ steps.compute.outputs.new_tag }}
+          TAG: ${{ steps.compute.outputs.version_tag }}
         with:
           script: |
             const fs = require("fs");
@@ -144,7 +90,7 @@ jobs:
 
       - name: Build and verify CTF
         run: |
-          task cli:generate/ctf VERSION=${{ steps.compute.outputs.base_version }}
+          task cli:generate/ctf VERSION=${{ steps.compute.outputs.version }}
           task cli:verify/ctf
 
       - name: Generate artifact attestation for binaries
@@ -171,7 +117,7 @@ jobs:
         id: tag
         uses: actions/github-script@v8
         env:
-          TAG: ${{ steps.compute.outputs.new_tag }}
+          TAG: ${{ steps.compute.outputs.version_tag }}
           CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +137,7 @@ jobs:
         if: ${{ steps.tag.outputs.pushed == 'true' }}
         uses: actions/github-script@v8
         env:
-          TAG: ${{ steps.compute.outputs.new_tag }}
+          TAG: ${{ steps.compute.outputs.version_tag }}
           CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -284,9 +230,9 @@ jobs:
         if: ${{ steps.tag.outputs.pushed == 'true' }}
         run: |
           oras cp \
-            --from-oci-layout "${{ github.workspace }}/${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar:${{ steps.compute.outputs.base_version }}" \
-            "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
-          echo "digest=$(oras resolve "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}")" >> "$GITHUB_OUTPUT"
+            --from-oci-layout "${{ github.workspace }}/${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar:${{ steps.compute.outputs.version }}" \
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.version }}"
+          echo "digest=$(oras resolve "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.version }}")" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation for OCI Image
         uses: actions/attest-build-provenance@v3
