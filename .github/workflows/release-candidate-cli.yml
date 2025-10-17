@@ -293,6 +293,6 @@ jobs:
         continue-on-error: true
         with:
           subject-digest: ${{ steps.push-oci-layout.outputs.digest }}
-          subject-name: "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
+          subject-name: "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           push-to-registry: true
