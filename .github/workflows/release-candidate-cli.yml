@@ -291,3 +291,20 @@ jobs:
                 core.info(`Skipping ${item}, not a file or directory.`);
               }
             }
+
+      - name: Setup ORAS
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        uses: oras-project/setup-oras@v1
+      - name: Log in to GHCR
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ steps.committer.outputs.name }}
+          password: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+      - name: Push OCI layout to GHCR
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        run: |
+          oras cp \
+            --from-oci-layout "${{ github.workspace }}/${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar:${{ steps.compute.outputs.base_version }}" \
+            "ghcr.io/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.base_version }}"
