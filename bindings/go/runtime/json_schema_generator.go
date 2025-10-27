@@ -7,7 +7,7 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-// GenerateJSONSchemaForType takes a Type and uses reflection to generate a JSON Schema representation for it.
+// GenerateJSONSchemaForType takes a Type and uses reflection to generate a JSON JSONSchema representation for it.
 // It will also use the correct type representation as we don't marshal the type in object format.
 func GenerateJSONSchemaForType(obj Typed) ([]byte, error) {
 	if obj == nil {
