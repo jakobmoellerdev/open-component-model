@@ -2,66 +2,77 @@ package cel
 
 import (
 	"fmt"
-	"maps"
-	"slices"
-	"strings"
 
-	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
-	apiservercel "k8s.io/apiserver/pkg/cel"
-	celopenapi "k8s.io/apiserver/pkg/cel/openapi"
-	"k8s.io/apiserver/pkg/cel/openapi/resolver"
-	"k8s.io/kube-openapi/pkg/validation/spec"
-	"ocm.software/open-component-model/bindings/go/cel/openapi"
+	invopop "github.com/invopop/jsonschema"
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 )
 
+type Organism struct {
+	Name    string  `json:"name"`
+	Address Address `json:"address"`
+}
+
+type Address struct {
+	Street string `json:"street"`
+	City   string `json:"city"`
+}
+
+//type Unstructured map[string]interface{}
+//type Typed struct {
+//	Typ          runtime.Type `json:"type"`
+//	Unstructured `json:",inline"`
+//}
+
 func OcmCelEnv() error {
-
-	openapi3gen.NewSchemaRefForValue()
-	refCallback := func(path string) spec.Ref {
-		return spec.MustCreateRef("#/definitions/" + path)
+	reflector := invopop.Reflector{
+		DoNotReference: true,
 	}
+	jsonSchema := reflector.Reflect(&Organism{})
+	declType := SchemaDeclType(&jsonschema.Schema{JSONSchema: jsonSchema})
+	declType = declType.MaybeAssignTypeName("__type_organism")
 
-	openAPI := openapi.GetOpenAPIDefinitions(refCallback)
-
-	s, err := resolver.PopulateRefs(func(ref string) (*spec.Schema, bool) {
-		// find the schema by the ref string, and return a deep copy
-		def, ok := openAPI[strings.TrimPrefix("#/definitions/", ref)]
-		if !ok {
-			return nil, false
-		}
-		s := def.Schema
-		return &s, true
-	}, ref)
+	//base := types.NewEmptyRegistry()
+	stdEnv, err := cel.NewEnv()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to create base cel environment: %v", err)
 	}
-
-	declTypes := make(map[string]*apiservercel.DeclType)
-	for name, typ := range openAPI {
-		declTypes[name] = celopenapi.SchemaDeclType(&typ.Schema, false)
-	}
-	declTypesList := slices.Collect(maps.Values(declTypes))
-
-	base := types.NewEmptyRegistry()
-	provider := apiservercel.NewDeclTypeProvider(declTypesList...)
-	provider, err := provider.WithTypeProvider(base)
-
-	envopts := []cel.EnvOption{
-		cel.CustomTypeProvider(provider),
-		cel.CustomTypeAdapter(provider),
-		cel.Variable("funghus", declTypes["./openapi.Funghus"].CelType()),
-	}
-
-	celenv, err := cel.NewEnv(envopts...)
+	provider := NewDeclTypeProvider(declType)
+	opts, err := provider.EnvOptions(stdEnv.CELTypeProvider())
 	if err != nil {
-		return fmt.Errorf("failed to initialize new cel environment: %v", err)
+		return fmt.Errorf("failed to create cel environment options: %v", err)
 	}
-	ast, iss := celenv.Compile(`funghus.properties.softness == "fabian"`)
-	if iss.Err() != nil {
-		return fmt.Errorf("failed to compile: %v", iss.Err())
+	opts = append(opts, cel.Variable("organism", declType.CelType()))
+	env, err := stdEnv.Extend(opts...)
+	if err != nil {
+		return fmt.Errorf("failed to extend cel environment: %v", err)
 	}
-	_ = ast
+
+	ast, iss := env.Compile("organism.address.street")
+	if iss != nil && iss.Err() != nil {
+		return fmt.Errorf("failed to compile expression: %v", iss.Err())
+	}
+
+	outputType := ast.OutputType()
+	schema, _ := jsonSchema.Properties.Get("name")
+	expectedType := SchemaDeclType(&jsonschema.Schema{JSONSchema: schema}).CelType()
+	if !expectedType.IsAssignableType(outputType) {
+		return fmt.Errorf("expected type %v but got %v", expectedType, outputType)
+	}
+
+	//prog, err := env.Program(ast)
+	//if err != nil {
+	//	return fmt.Errorf("failed to create cel program: %v", err)
+	//}
+	//
+	//val, details, err := prog.Eval(map[string]interface{}{
+	//	"person": map[string]interface{}{
+	//		"name": "John Doe",
+	//	},
+	//})
+	//if err != nil {
+	//	return fmt.Errorf("failed to evaluate cel program: %v", err)
+	//}
+	//_, _ = val, details
 	return nil
 }

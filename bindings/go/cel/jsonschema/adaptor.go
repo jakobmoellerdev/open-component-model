@@ -1,24 +1,13 @@
 package jsonschema
 
 import (
-	"math"
 	"reflect"
 
-	"github.com/google/cel-go/common/types/ref"
 	"github.com/invopop/jsonschema"
-	apiservercel "k8s.io/apiserver/pkg/cel"
-	"k8s.io/apiserver/pkg/cel/common"
 )
-
-var _ common.Schema = (*Schema)(nil)
-var _ common.SchemaOrBool = (*Schema)(nil)
 
 type Schema struct {
 	JSONSchema *jsonschema.Schema
-}
-
-func (s *Schema) Schema() common.Schema {
-	return s
 }
 
 func (s *Schema) Allows() bool {
@@ -48,18 +37,18 @@ func (s *Schema) Pattern() string {
 	return s.JSONSchema.Pattern
 }
 
-func (s *Schema) Items() common.Schema {
+func (s *Schema) Items() *Schema {
 	if s.JSONSchema.Items == nil {
 		return nil
 	}
 	return &Schema{JSONSchema: s.JSONSchema.Items}
 }
 
-func (s *Schema) Properties() map[string]common.Schema {
+func (s *Schema) Properties() map[string]*Schema {
 	if s.JSONSchema.Properties == nil {
 		return nil
 	}
-	res := make(map[string]common.Schema, s.JSONSchema.Properties.Len())
+	res := make(map[string]*Schema, s.JSONSchema.Properties.Len())
 	for pair := s.JSONSchema.Properties.Oldest(); pair != nil; pair = pair.Next() {
 		s := *pair.Value
 		res[pair.Key] = &Schema{JSONSchema: &s}
@@ -67,8 +56,8 @@ func (s *Schema) Properties() map[string]common.Schema {
 	return res
 }
 
-func (s *Schema) AdditionalProperties() common.SchemaOrBool {
-	if s.JSONSchema.AdditionalProperties == nil {
+func (s *Schema) AdditionalProperties() *Schema {
+	if s.JSONSchema.AdditionalProperties == jsonschema.FalseSchema {
 		return nil
 	}
 	return &Schema{JSONSchema: s.JSONSchema.AdditionalProperties}
@@ -120,52 +109,46 @@ func (s *Schema) UniqueItems() bool {
 	return s.JSONSchema.UniqueItems
 }
 
-func (s *Schema) MinItems() *int64 {
-	if *s.JSONSchema.MinItems > math.MaxInt64 {
-		panic("min items cannot be parsed to int64")
+func (s *Schema) MinItems() *uint64 {
+	if s.JSONSchema.MinItems == nil {
+		return new(uint64)
 	}
-	minItems := int64(*s.JSONSchema.MinItems)
-	return &minItems
+	return s.JSONSchema.MinItems
 }
 
-func (s *Schema) MaxItems() *int64 {
-	if *s.JSONSchema.MaxItems > math.MaxInt64 {
-		panic("min items cannot be parsed to int64")
+func (s *Schema) MaxItems() *uint64 {
+	if s.JSONSchema.MaxItems == nil {
+		return new(uint64)
 	}
-	maxItems := int64(*s.JSONSchema.MaxItems)
-	return &maxItems
+	return s.JSONSchema.MaxItems
 }
 
-func (s *Schema) MinLength() *int64 {
-	if *s.JSONSchema.MinLength > math.MaxInt64 {
-		panic("min items cannot be parsed to int64")
+func (s *Schema) MinLength() *uint64 {
+	if s.JSONSchema.MinLength == nil {
+		return new(uint64)
 	}
-	minLength := int64(*s.JSONSchema.MinLength)
-	return &minLength
+	return s.JSONSchema.MinLength
 }
 
-func (s *Schema) MaxLength() *int64 {
-	if *s.JSONSchema.MaxLength > math.MaxInt64 {
-		panic("min items cannot be parsed to int64")
+func (s *Schema) MaxLength() *uint64 {
+	if s.JSONSchema.MaxLength == nil {
+		return new(uint64)
 	}
-	maxLength := int64(*s.JSONSchema.MaxLength)
-	return &maxLength
+	return s.JSONSchema.MaxLength
 }
 
-func (s *Schema) MinProperties() *int64 {
-	if *s.JSONSchema.MinProperties > math.MaxInt64 {
-		panic("min items cannot be parsed to int64")
+func (s *Schema) MinProperties() *uint64 {
+	if s.JSONSchema.MinProperties == nil {
+		return new(uint64)
 	}
-	minProperties := int64(*s.JSONSchema.MinProperties)
-	return &minProperties
+	return s.JSONSchema.MinProperties
 }
 
-func (s *Schema) MaxProperties() *int64 {
-	if *s.JSONSchema.MaxProperties > math.MaxInt64 {
-		panic("min items cannot be parsed to int64")
+func (s *Schema) MaxProperties() *uint64 {
+	if s.JSONSchema.MaxProperties == nil {
+		return new(uint64)
 	}
-	minProperties := int64(*s.JSONSchema.MaxProperties)
-	return &minProperties
+	return s.JSONSchema.MaxProperties
 }
 
 func (s *Schema) Required() []string {
@@ -176,12 +159,8 @@ func (s *Schema) Enum() []any {
 	return s.JSONSchema.Enum
 }
 
-func (s *Schema) Nullable() bool {
-	return s.JSONSchema.Nullable
-}
-
-func (s *Schema) AllOf() []common.Schema {
-	var res []common.Schema
+func (s *Schema) AllOf() []*Schema {
+	var res []*Schema
 	for _, nestedSchema := range s.JSONSchema.AllOf {
 		nestedSchema := *nestedSchema
 		res = append(res, &Schema{&nestedSchema})
@@ -189,8 +168,8 @@ func (s *Schema) AllOf() []common.Schema {
 	return res
 }
 
-func (s *Schema) AnyOf() []common.Schema {
-	var res []common.Schema
+func (s *Schema) AnyOf() []*Schema {
+	var res []*Schema
 	for _, nestedSchema := range s.JSONSchema.AnyOf {
 		nestedSchema := *nestedSchema
 		res = append(res, &Schema{&nestedSchema})
@@ -198,8 +177,8 @@ func (s *Schema) AnyOf() []common.Schema {
 	return res
 }
 
-func (s *Schema) OneOf() []common.Schema {
-	var res []common.Schema
+func (s *Schema) OneOf() []*Schema {
+	var res []*Schema
 	for _, nestedSchema := range s.JSONSchema.OneOf {
 		nestedSchema := *nestedSchema
 		res = append(res, &Schema{&nestedSchema})
@@ -207,53 +186,9 @@ func (s *Schema) OneOf() []common.Schema {
 	return res
 }
 
-func (s *Schema) Not() common.Schema {
+func (s *Schema) Not() *Schema {
 	if s.JSONSchema.Not == nil {
 		return nil
 	}
 	return &Schema{s.JSONSchema.Not}
-}
-
-func (s *Schema) IsXIntOrString() bool {
-	return isXIntOrString(s.Schema)
-}
-
-func (s *Schema) IsXEmbeddedResource() bool {
-	return isXEmbeddedResource(s.Schema)
-}
-
-func (s *Schema) IsXPreserveUnknownFields() bool {
-	return isXPreserveUnknownFields(s.Schema)
-}
-
-func (s *Schema) XListType() string {
-	return getXListType(s.Schema)
-}
-
-func (s *Schema) XMapType() string {
-	return getXMapType(s.Schema)
-}
-
-func (s *Schema) XListMapKeys() []string {
-	return getXListMapKeys(s.Schema)
-}
-
-func (s *Schema) XValidations() []common.ValidationRule {
-	return getXValidations(s.Schema)
-}
-
-func (s *Schema) WithTypeAndObjectMeta() common.Schema {
-	return &Schema{common.WithTypeAndObjectMeta(s.Schema)}
-}
-
-func UnstructuredToVal(unstructured any, schema *spec.Schema) ref.Val {
-	return common.UnstructuredToVal(unstructured, &Schema{schema})
-}
-
-func SchemaDeclType(s *spec.Schema, isResourceRoot bool) *apiservercel.DeclType {
-	return common.SchemaDeclType(&Schema{JSONSchema: s}, isResourceRoot)
-}
-
-func MakeMapList(sts *spec.Schema, items []interface{}) (rv common.MapList) {
-	return common.MakeMapList(&Schema{JSONSchema: sts}, items)
 }
