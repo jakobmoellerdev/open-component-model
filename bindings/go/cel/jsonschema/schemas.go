@@ -1,15 +1,18 @@
-package cel
+package jsonschema
 
 import (
 	"time"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
-	apiservercel "k8s.io/apiserver/pkg/cel"
-	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
+	invopop "github.com/invopop/jsonschema"
 )
 
 const MaxRequestSizeBytes = uint64(3 * 1024 * 1024)
+
+func SchemaDeclTypeForInvopop(s *invopop.Schema) *DeclType {
+	return SchemaDeclType(&Schema{JSONSchema: s})
+}
 
 // SchemaDeclType converts the structural schema to a CEL declaration, or returns nil if the
 // structural schema should not be exposed in CEL expressions.
@@ -20,7 +23,7 @@ const MaxRequestSizeBytes = uint64(3 * 1024 * 1024)
 // if their schema is not exposed.
 //
 // The CEL declaration for objects with XPreserveUnknownFields does not expose unknown fields.
-func SchemaDeclType(s *jsonschema.Schema) *DeclType {
+func SchemaDeclType(s *Schema) *DeclType {
 	if s == nil {
 		return nil
 	}
@@ -94,7 +97,7 @@ func SchemaDeclType(s *jsonschema.Schema) *DeclType {
 	case "string":
 		switch s.Format() {
 		case "byte":
-			byteWithMaxLength := NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), apiservercel.MinStringSize)
+			byteWithMaxLength := NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), MinStringSize)
 			if s.MaxLength() != nil {
 				byteWithMaxLength.MaxElements = *s.MaxLength()
 			} else {
@@ -115,7 +118,7 @@ func SchemaDeclType(s *jsonschema.Schema) *DeclType {
 			return timestampWithMaxLength
 		}
 
-		strWithMaxLength := NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), apiservercel.MinStringSize)
+		strWithMaxLength := NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), MinStringSize)
 		if s.MaxLength() != nil {
 			strWithMaxLength.MaxElements = estimateMaxElementsFromMaxLength(s)
 		} else {
@@ -139,7 +142,7 @@ func SchemaDeclType(s *jsonschema.Schema) *DeclType {
 // estimateMaxStringLengthPerRequest estimates the maximum string length (in characters)
 // of a string compatible with the format requirements in the provided schema.
 // must only be called on schemas of type "string" or x-kubernetes-int-or-string: true
-func estimateMaxStringLengthPerRequest(s *jsonschema.Schema) uint64 {
+func estimateMaxStringLengthPerRequest(s *Schema) uint64 {
 	switch s.Format() {
 	case "duration":
 		return MaxDurationSizeJSON
@@ -156,7 +159,7 @@ func estimateMaxStringLengthPerRequest(s *jsonschema.Schema) uint64 {
 // estimateMaxStringLengthPerRequest estimates the maximum string length (in characters)
 // that has a set of enum values.
 // The result of the estimation is the length of the longest possible value.
-func estimateMaxStringEnumLength(s *jsonschema.Schema) uint64 {
+func estimateMaxStringEnumLength(s *Schema) uint64 {
 	var maxLength uint64
 	for _, v := range s.Enum() {
 		if s, ok := v.(string); ok && uint64(len(s)) > maxLength {
@@ -185,7 +188,7 @@ func estimateMaxAdditionalPropertiesFromMinSize(minSize uint64) uint64 {
 
 // estimateMaxElementsFromMaxLength estimates the maximum number of elements for a string schema
 // that is bound with a maxLength constraint.
-func estimateMaxElementsFromMaxLength(s *jsonschema.Schema) uint64 {
+func estimateMaxElementsFromMaxLength(s *Schema) uint64 {
 	// multiply the user-provided max length by 4 in the case of an otherwise-untyped string
 	// we do this because the OpenAPIv3 spec indicates that maxLength is specified in runes/code points,
 	// but we need to reason about length for things like request size, so we use bytes in this code (and an individual
