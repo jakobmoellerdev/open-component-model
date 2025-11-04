@@ -77,3 +77,78 @@ func TestGenerateJSONSchemaForType(t *testing.T) {
 		})
 	}
 }
+
+type Object struct {
+	Type Type   `json:"type"`
+	Foo  string `json:"foo"`
+}
+
+func (o *Object) GetType() Type {
+	return o.Type
+}
+
+func (o *Object) SetType(t Type) {
+	o.Type = t
+}
+
+func (o *Object) DeepCopyTyped() Typed {
+	return &Object{
+		Type: o.Type,
+		Foo:  o.Foo,
+	}
+}
+
+var _ Typed = (*Object)(nil)
+
+type Parent[T Typed] struct {
+	Key   string `json:"key"`
+	Child T      `json:"child"`
+}
+
+type GenericParent struct {
+	Key   string `json:"key"`
+	Child Typed  `json:"child"`
+}
+
+func TestGenerateJSONSchemaFromScheme(t *testing.T) {
+	t.Run("simple", func(t *testing.T) {
+		scheme := NewScheme()
+		scheme.MustRegisterWithAlias(&Object{}, NewUnversionedType("object"), NewVersionedType("alias", "v1"))
+		jsonScheme := GenerateJSONSchemaWithScheme(scheme, &Parent[*Object]{
+			Child: &Object{},
+		})
+		data, err := jsonScheme.MarshalJSON()
+		_, _ = data, err
+		t.Fail()
+	})
+
+	t.Run("raw", func(t *testing.T) {
+		scheme := NewScheme()
+		scheme.MustRegisterWithAlias(&Object{}, NewUnversionedType("object"), NewVersionedType("alias", "v1"))
+
+		jsonScheme := GenerateJSONSchemaWithScheme(scheme, &Parent[*Raw]{
+			Child: &Raw{
+				Type: NewUnversionedType("object"),
+				Data: []byte(`{"type": "object", "foo": "bar"}`),
+			},
+		})
+		data, err := jsonScheme.MarshalJSON()
+		_, _ = data, err
+		t.Fail()
+	})
+
+	t.Run("generic", func(t *testing.T) {
+		scheme := NewScheme()
+		scheme.MustRegisterWithAlias(&Object{}, NewUnversionedType("object"), NewVersionedType("alias", "v1"))
+
+		jsonScheme := GenerateJSONSchemaWithScheme(scheme, &GenericParent{
+			Child: &Raw{
+				Type: NewUnversionedType("object"),
+				Data: []byte(`{"type": "object", "foo": "bar"}`),
+			},
+		})
+		data, err := jsonScheme.MarshalJSON()
+		_, _ = data, err
+		t.Fail()
+	})
+}

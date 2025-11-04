@@ -38,3 +38,94 @@ func GenerateJSONSchemaForType(obj Typed) ([]byte, error) {
 
 	return schema, nil
 }
+
+func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) *jsonschema.Schema {
+	reflector := &jsonschema.Reflector{}
+
+	anyTypedProps := jsonschema.NewProperties()
+	anyTypedProps.Set("type", &jsonschema.Schema{
+		Type:    "string",
+		Pattern: `^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?`,
+	})
+	anyTypedScheme := &jsonschema.Schema{
+		Type:                 "object",
+		Required:             []string{"type"},
+		Properties:           anyTypedProps,
+		AdditionalProperties: jsonschema.TrueSchema,
+	}
+
+	f := func(r reflect.Type) *jsonschema.Schema {
+		v := reflect.New(r).Interface()
+
+		if _, ok := v.(*Typed); ok {
+			// this can happen if we have a runtime.Typed nil interface pointer
+			// (parent object has a field of type runtime.Typed)
+			// Then we cannot derive any typing information
+			return anyTypedScheme
+		}
+
+		val, ok := v.(Typed)
+		if !ok {
+			return nil
+		}
+		_, isRaw := val.(*Raw)
+		_, isUnstructured := val.(*Unstructured)
+
+		if isRaw || isUnstructured {
+			return anyTypedScheme
+		}
+
+		typ, err := scheme.TypeForPrototype(val)
+		if err != nil {
+			panic(err)
+		}
+
+		prototype, err := scheme.NewObject(typ)
+		if err != nil {
+			panic(err)
+		}
+		enum, err := getTypeEnum(scheme, prototype)
+		if err != nil {
+			panic(err)
+		}
+
+		typedReflector := &jsonschema.Reflector{
+			DoNotReference: true,
+			Anonymous:      true,
+			Mapper: func(child reflect.Type) *jsonschema.Schema {
+				if child == r {
+					return nil
+				}
+				if child == reflect.TypeOf(Type{}) {
+					return enum
+				}
+				parentReflect := reflector.ReflectFromType(child)
+				return parentReflect
+			},
+		}
+		schema := typedReflector.Reflect(prototype)
+		return schema
+	}
+	reflector.Mapper = f
+	reflector.Anonymous = true
+	reflector.DoNotReference = true
+
+	return reflector.ReflectFromType(reflect.TypeOf(obj))
+}
+
+func getTypeEnum(scheme *Scheme, obj Typed) (*jsonschema.Schema, error) {
+	typs, ok := scheme.GetTypes()[obj.GetType()]
+	if !ok {
+		return nil, fmt.Errorf("cannot generate JSON schema for object with unknown type: %s", obj.GetType())
+	}
+	typEnum := make([]any, 0, len(typs)+1)
+	typEnum = append(typEnum, obj.GetType())
+	for _, typ := range typs {
+		typEnum = append(typEnum, typ.String())
+	}
+	typScheme := &jsonschema.Schema{
+		Type: "string",
+		Enum: typEnum,
+	}
+	return typScheme, nil
+}
