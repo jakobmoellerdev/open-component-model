@@ -11,7 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ValidatePlugin will take a runtime Type and validate it against the given JSON Schema.
+// ValidatePlugin will take a runtime Type and validate it against the given JSON JSONSchema.
 func ValidatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
 	c := jsonschema.NewCompiler()
 	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonSchema))

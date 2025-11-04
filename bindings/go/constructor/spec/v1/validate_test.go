@@ -290,5 +290,5 @@ func TestJSONSchemaCompilation(t *testing.T) {
 	// Test that the schema is cached
 	schema2, err := GetJSONSchema()
 	require.NoError(t, err)
-	require.Equal(t, schema, schema2, "Schema should be cached and return the same instance")
+	require.Equal(t, schema, schema2, "JSONSchema should be cached and return the same instance")
 }
