@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -39,7 +40,7 @@ func GenerateJSONSchemaForType(obj Typed) ([]byte, error) {
 	return schema, nil
 }
 
-func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) *jsonschema.Schema {
+func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) (*jsonschema.Schema, error) {
 	reflector := &jsonschema.Reflector{}
 
 	anyTypedProps := jsonschema.NewProperties()
@@ -53,7 +54,7 @@ func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) *jsonschema.Schema {
 		Properties:           anyTypedProps,
 		AdditionalProperties: jsonschema.TrueSchema,
 	}
-
+	var retErr error
 	f := func(r reflect.Type) *jsonschema.Schema {
 		v := reflect.New(r).Interface()
 
@@ -75,18 +76,21 @@ func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) *jsonschema.Schema {
 			return anyTypedScheme
 		}
 
-		typ, err := scheme.TypeForPrototype(val)
+		//typ, err := scheme.TypeForPrototype(val)
+		//if err != nil {
+		//	errors.Join(retErr, fmt.Errorf("failed to get type for prototype %T: %w", val, err))
+		//	return nil
+		//}
+		//
+		//prototype, err := scheme.NewObject(typ)
+		//if err != nil {
+		//	errors.Join(retErr, fmt.Errorf("failed to create new object for type %s: %w", typ, err))
+		//	return nil
+		//}
+		enum, err := getTypeEnum(scheme, val)
 		if err != nil {
-			panic(err)
-		}
-
-		prototype, err := scheme.NewObject(typ)
-		if err != nil {
-			panic(err)
-		}
-		enum, err := getTypeEnum(scheme, prototype)
-		if err != nil {
-			panic(err)
+			errors.Join(retErr, fmt.Errorf("failed to get enum for prototype %T: %w", val, err))
+			return nil
 		}
 
 		typedReflector := &jsonschema.Reflector{
@@ -103,14 +107,14 @@ func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) *jsonschema.Schema {
 				return parentReflect
 			},
 		}
-		schema := typedReflector.Reflect(prototype)
+		schema := typedReflector.Reflect(val)
 		return schema
 	}
 	reflector.Mapper = f
 	reflector.Anonymous = true
 	reflector.DoNotReference = true
 
-	return reflector.ReflectFromType(reflect.TypeOf(obj))
+	return reflector.ReflectFromType(reflect.TypeOf(obj)), nil
 }
 
 func getTypeEnum(scheme *Scheme, obj Typed) (*jsonschema.Schema, error) {

@@ -102,7 +102,7 @@ func (r *Scheme) RegisterScheme(scheme *Scheme) error {
 		return nil
 	}
 
-	// Register each type from the source scheme
+	// RegisterSchemaForType each type from the source scheme
 	for typ := range scheme.defaults {
 		if err := r.RegisterSchemeType(scheme, typ); err != nil {
 			return err

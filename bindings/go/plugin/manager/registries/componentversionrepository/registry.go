@@ -8,11 +8,13 @@ import (
 	"os/exec"
 	"sync"
 
+	invopop "github.com/invopop/jsonschema"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"sigs.k8s.io/json"
 )
 
 type constructedPlugin struct {
@@ -64,6 +66,8 @@ type RepositoryRegistry struct {
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
 	// that their type is registered or not.
 	scheme *runtime.Scheme
+
+	schemaMapper runtime.SchemaMapper
 }
 
 // Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface
@@ -100,6 +104,23 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) e
 
 	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 	r.registry[typ] = plugin
+
+	// Register JSON schemas for all types provided by the plugin.
+	types := plugin.Types["componentVersionRepository"]
+	for _, t := range types {
+		schema := &invopop.Schema{}
+		strictErrs, err := json.UnmarshalStrict(t.JSONSchema, &schema)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal JSON schema for type %v: %w", t.Type, err)
+		}
+		if len(strictErrs) > 0 {
+			return fmt.Errorf("JSON schema for type %v has strict unmarshal errors: %v", t.Type, strictErrs)
+		}
+		err = r.schemaMapper.RegisterSchemaForType(context.Background(), t.Type, schema)
+		if err != nil {
+			return fmt.Errorf("failed to register JSON schema for type %v: %w", t.Type, err)
+		}
+	}
 
 	return nil
 }
@@ -228,11 +249,15 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v
 
 // NewComponentVersionRepositoryRegistry creates a new registry and initializes maps.
 func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
+	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	mapper := runtime.NewDefaultSchemaMapper(scheme)
+
 	return &RepositoryRegistry{
 		ctx:                ctx,
 		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
-		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
+		scheme:             scheme,
 		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepositoryProvider),
+		schemaMapper: mapper,
 	}
 }

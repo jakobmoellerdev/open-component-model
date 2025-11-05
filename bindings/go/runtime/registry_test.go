@@ -361,7 +361,7 @@ func TestRegistry_RegisterScheme(t *testing.T) {
 	t.Run("alias conflict", func(t *testing.T) {
 		r := require.New(t)
 		targetScheme := NewScheme()
-		// Register a type with an alias that will conflict
+		// RegisterSchemaForType a type with an alias that will conflict
 		conflictType := NewVersionedType("conflict", "v1")
 		targetScheme.MustRegisterWithAlias(&TestType{}, conflictType, typ2)
 
@@ -433,7 +433,7 @@ func TestRegistry_RegisterSchemeType(t *testing.T) {
 	t.Run("alias conflict", func(t *testing.T) {
 		r := require.New(t)
 		targetScheme := NewScheme()
-		// Register a type with an alias that will conflict
+		// RegisterSchemaForType a type with an alias that will conflict
 		conflictType := NewVersionedType("conflict", "v1")
 		targetScheme.MustRegisterWithAlias(&TestType{}, conflictType, typ2)
 
@@ -515,7 +515,7 @@ func TestScheme_GetTypes(t *testing.T) {
 					NewVersionedType("Foobar", "v1"),
 					NewVersionedType("Foobar", "v1alpha1"),
 				)
-				// Register the source scheme
+				// RegisterSchemaForType the source scheme
 				err := s.RegisterScheme(source)
 				if err != nil {
 					t.Fatal(err)
@@ -584,7 +584,7 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 	t.Run("conflicting schemes", func(t *testing.T) {
 		r := require.New(t)
 		registry := NewScheme()
-		registry.MustRegisterWithAlias(&TestType{}, typ1) // Register typ1 first
+		registry.MustRegisterWithAlias(&TestType{}, typ1) // RegisterSchemaForType typ1 first
 
 		// Create a scheme with conflicting type
 		conflictingScheme := NewScheme()
@@ -606,7 +606,7 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 	t.Run("partial registration", func(t *testing.T) {
 		r := require.New(t)
 		registry := NewScheme()
-		registry.MustRegisterWithAlias(&TestType{}, typ1) // Register typ1 first
+		registry.MustRegisterWithAlias(&TestType{}, typ1) // RegisterSchemaForType typ1 first
 
 		// Create a scheme with conflicting type
 		conflictingScheme := NewScheme()

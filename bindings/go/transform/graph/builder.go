@@ -39,7 +39,7 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	}
 
 	// For each resource in the resource graph definition, we need to:
-	// 1. Based the transformer type, we need to load the transformations schema for the plugin.
+	// 1. Based on the transformer type, we need to load the transformations schema for the plugin.
 	// 2. Extract the CEL expressions from the transformations + validate them.
 
 	transformations := make(map[string]*Transformation)

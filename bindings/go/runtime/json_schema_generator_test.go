@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type customType struct {
@@ -111,12 +112,14 @@ type GenericParent struct {
 }
 
 func TestGenerateJSONSchemaFromScheme(t *testing.T) {
+	r := require.New(t)
 	t.Run("simple", func(t *testing.T) {
 		scheme := NewScheme()
 		scheme.MustRegisterWithAlias(&Object{}, NewUnversionedType("object"), NewVersionedType("alias", "v1"))
-		jsonScheme := GenerateJSONSchemaWithScheme(scheme, &Parent[*Object]{
+		jsonScheme, err := GenerateJSONSchemaWithScheme(scheme, &Parent[*Object]{
 			Child: &Object{},
 		})
+		r.NoError(err)
 		data, err := jsonScheme.MarshalJSON()
 		_, _ = data, err
 		t.Fail()
@@ -126,12 +129,13 @@ func TestGenerateJSONSchemaFromScheme(t *testing.T) {
 		scheme := NewScheme()
 		scheme.MustRegisterWithAlias(&Object{}, NewUnversionedType("object"), NewVersionedType("alias", "v1"))
 
-		jsonScheme := GenerateJSONSchemaWithScheme(scheme, &Parent[*Raw]{
+		jsonScheme, err := GenerateJSONSchemaWithScheme(scheme, &Parent[*Raw]{
 			Child: &Raw{
 				Type: NewUnversionedType("object"),
 				Data: []byte(`{"type": "object", "foo": "bar"}`),
 			},
 		})
+		r.NoError(err)
 		data, err := jsonScheme.MarshalJSON()
 		_, _ = data, err
 		t.Fail()
@@ -141,12 +145,13 @@ func TestGenerateJSONSchemaFromScheme(t *testing.T) {
 		scheme := NewScheme()
 		scheme.MustRegisterWithAlias(&Object{}, NewUnversionedType("object"), NewVersionedType("alias", "v1"))
 
-		jsonScheme := GenerateJSONSchemaWithScheme(scheme, &GenericParent{
+		jsonScheme, err := GenerateJSONSchemaWithScheme(scheme, &GenericParent{
 			Child: &Raw{
 				Type: NewUnversionedType("object"),
 				Data: []byte(`{"type": "object", "foo": "bar"}`),
 			},
 		})
+		r.NoError(err)
 		data, err := jsonScheme.MarshalJSON()
 		_, _ = data, err
 		t.Fail()
