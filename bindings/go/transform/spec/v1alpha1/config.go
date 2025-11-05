@@ -6,8 +6,8 @@ import (
 
 // +k8s:deepcopy-gen=true
 type TransformationGraphDefinition struct {
-	Environment     Environment    `json:"environment"`
-	Transformations []*runtime.Raw `json:"transformations"`
+	Environment     *runtime.Unstructured `json:"environment"`
+	Transformations []*runtime.Raw        `json:"transformations"`
 }
 
-type Environment map[string]any
+//type Environment *runtime.Unstructured

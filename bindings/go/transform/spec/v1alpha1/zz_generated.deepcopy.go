@@ -14,14 +14,7 @@ func (in *TransformationGraphDefinition) DeepCopyInto(out *TransformationGraphDe
 	*out = *in
 	if in.Environment != nil {
 		in, out := &in.Environment, &out.Environment
-		*out = make(Environment, len(*in))
-		for key, val := range *in {
-			if val == nil {
-				(*out)[key] = nil
-			} else {
-				(*out)[key] = val.DeepCopyany()
-			}
-		}
+		*out = (*in).DeepCopy()
 	}
 	if in.Transformations != nil {
 		in, out := &in.Transformations, &out.Transformations

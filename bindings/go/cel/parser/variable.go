@@ -42,7 +42,7 @@ type FieldDescriptor struct {
 	StandaloneExpression bool
 }
 
-// ResourceField ResourceVariable represents a variable in a resource. Variables are any
+// TransformationField ResourceVariable represents a variable in a resource. Variables are any
 // field in a resource (under resources[*].definition) that is not a constant
 // value a.k.a contains one or multiple expressions. For example
 //
@@ -56,7 +56,7 @@ type FieldDescriptor struct {
 //
 // ResourceVariables are an extension of CELField, and they contain additional
 // information about the variable kind.
-type ResourceField struct {
+type TransformationField struct {
 	// CELField is the object that contains the expression, the path, and
 	// the expected type (OpenAPI schema).
 	FieldDescriptor
@@ -71,8 +71,8 @@ type ResourceField struct {
 	// a dynamic variable that is not necessarily forcing a dependency.
 }
 
-// AddDependencies adds dependencies to the ResourceField.
-func (rv *ResourceField) AddDependencies(dep ...string) {
+// AddDependencies adds dependencies to the TransformationField.
+func (rv *TransformationField) AddDependencies(dep ...string) {
 	for _, d := range dep {
 		if !slices.Contains(rv.Dependencies, d) {
 			rv.Dependencies = append(rv.Dependencies, d)

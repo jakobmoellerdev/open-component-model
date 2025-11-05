@@ -3,8 +3,6 @@ package graph
 import (
 	"fmt"
 	"regexp"
-
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
 var (
@@ -14,8 +12,8 @@ var (
 
 // validateTransformationGraphDefinitionNamingConventions validates the naming conventions of
 // the given resource graph definition.
-func validateTransformationGraphDefinitionNamingConventions(tgd *v1alpha1.TransformationGraphDefinition) error {
-	err := validateResourceIDs(tgd)
+func validateTransformationGraphDefinitionNamingConventions(transformations map[string]*Transformation) error {
+	err := validateResourceIDs(transformations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", ErrNamingConvention, err)
 	}
@@ -67,10 +65,10 @@ var (
 // - The id should start with a lowercase letter.
 // - The id should only contain alphanumeric characters.
 // - Does not contain any special characters, underscores, or hyphens.
-func validateResourceIDs(tgd *v1alpha1.TransformationGraphDefinition) error {
+func validateResourceIDs(transformations map[string]*Transformation) error {
 	seen := make(map[string]struct{})
-	for _, transformation := range tgd.Transformations {
-		meta := transformation.GetTransformationMeta()
+	for _, transformation := range transformations {
+		meta := transformation.meta
 		if isOCMReservedWord(meta.ID) {
 			return fmt.Errorf("id %s is a reserved keyword in OCM", meta.ID)
 		}

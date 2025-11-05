@@ -66,12 +66,49 @@ type RepositoryRegistry struct {
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
 	// that their type is registered or not.
 	scheme *runtime.Scheme
-
-	schemaMapper runtime.SchemaMapper
 }
 
 // Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface
 var _ repository.ComponentVersionRepositoryProvider = (*RepositoryRegistry)(nil)
+
+func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecification runtime.Typed) (*invopop.Schema, error) {
+	// Check if this is an internal plugin first
+	_, _ = r.scheme.DefaultType(repositorySpecification)
+	typ := repositorySpecification.GetType()
+	if ok := r.scheme.IsRegistered(typ); ok {
+		obj, err := r.scheme.NewObject(typ)
+		if err != nil {
+			return nil, fmt.Errorf("could not create new object for type %v: %w", typ, err)
+		}
+		schema, err := runtime.GenerateJSONSchemaWithScheme(r.scheme, obj)
+		if err != nil {
+			return nil, fmt.Errorf("could not generate JSON schema for %T: %w", repositorySpecification, err)
+		}
+		return schema, nil
+	}
+
+	// For external plugins, get the plugin and ask for identity
+	plugin, ok := r.registry[typ]
+	if !ok {
+		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
+	}
+	types := plugin.Types[mtypes.ComponentVersionRepositoryPluginType]
+	for _, t := range types {
+		if t.Type != typ {
+			continue
+		}
+		schema := &invopop.Schema{}
+		strictErrs, err := json.UnmarshalStrict(t.JSONSchema, &schema)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal JSON schema for type %v: %w", t.Type, err)
+		}
+		if len(strictErrs) > 0 {
+			return nil, fmt.Errorf("JSON schema for type %v has strict unmarshal errors: %v", t.Type, strictErrs)
+		}
+		return schema, nil
+	}
+	return nil, fmt.Errorf("failed to get JSON schema for repository specification %T of type %s", repositorySpecification, typ.String())
+}
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
 // All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
@@ -104,23 +141,6 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) e
 
 	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 	r.registry[typ] = plugin
-
-	// Register JSON schemas for all types provided by the plugin.
-	types := plugin.Types["componentVersionRepository"]
-	for _, t := range types {
-		schema := &invopop.Schema{}
-		strictErrs, err := json.UnmarshalStrict(t.JSONSchema, &schema)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal JSON schema for type %v: %w", t.Type, err)
-		}
-		if len(strictErrs) > 0 {
-			return fmt.Errorf("JSON schema for type %v has strict unmarshal errors: %v", t.Type, strictErrs)
-		}
-		err = r.schemaMapper.RegisterSchemaForType(context.Background(), t.Type, schema)
-		if err != nil {
-			return fmt.Errorf("failed to register JSON schema for type %v: %w", t.Type, err)
-		}
-	}
 
 	return nil
 }
@@ -250,7 +270,6 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v
 // NewComponentVersionRepositoryRegistry creates a new registry and initializes maps.
 func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-	mapper := runtime.NewDefaultSchemaMapper(scheme)
 
 	return &RepositoryRegistry{
 		ctx:                ctx,
@@ -258,6 +277,5 @@ func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegis
 		constructedPlugins: make(map[string]*constructedPlugin),
 		scheme:             scheme,
 		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepositoryProvider),
-		schemaMapper: mapper,
 	}
 }

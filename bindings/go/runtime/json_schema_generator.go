@@ -76,18 +76,18 @@ func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) (*jsonschema.Schema, 
 			return anyTypedScheme
 		}
 
-		//typ, err := scheme.TypeForPrototype(val)
-		//if err != nil {
-		//	errors.Join(retErr, fmt.Errorf("failed to get type for prototype %T: %w", val, err))
-		//	return nil
-		//}
-		//
-		//prototype, err := scheme.NewObject(typ)
-		//if err != nil {
-		//	errors.Join(retErr, fmt.Errorf("failed to create new object for type %s: %w", typ, err))
-		//	return nil
-		//}
-		enum, err := getTypeEnum(scheme, val)
+		typ, err := scheme.TypeForPrototype(val)
+		if err != nil {
+			errors.Join(retErr, fmt.Errorf("failed to get type for prototype %T: %w", val, err))
+			return nil
+		}
+
+		prototype, err := scheme.NewObject(typ)
+		if err != nil {
+			errors.Join(retErr, fmt.Errorf("failed to create new object for type %s: %w", typ, err))
+			return nil
+		}
+		enum, err := getTypeEnum(scheme, prototype)
 		if err != nil {
 			errors.Join(retErr, fmt.Errorf("failed to get enum for prototype %T: %w", val, err))
 			return nil
@@ -107,14 +107,14 @@ func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) (*jsonschema.Schema, 
 				return parentReflect
 			},
 		}
-		schema := typedReflector.Reflect(val)
+		schema := typedReflector.Reflect(prototype)
 		return schema
 	}
 	reflector.Mapper = f
 	reflector.Anonymous = true
 	reflector.DoNotReference = true
 
-	return reflector.ReflectFromType(reflect.TypeOf(obj)), nil
+	return reflector.ReflectFromType(reflect.TypeOf(obj)), retErr
 }
 
 func getTypeEnum(scheme *Scheme, obj Typed) (*jsonschema.Schema, error) {
