@@ -8,7 +8,9 @@ import (
 
 	_ "embed"
 
+	invopop "github.com/invopop/jsonschema"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"sigs.k8s.io/yaml"
 )
 
@@ -17,14 +19,19 @@ import (
 //go:embed resources/schema-2020-12.json
 var JSONSchema []byte
 
+type Schema struct {
+	jsonschema.Schema
+	Invopop invopop.Schema
+}
+
 // GetJSONSchema is a singleton that compiles the JSON schema once and caches it for reuse.
-var GetJSONSchema = sync.OnceValues[*jsonschema.Schema, error](func() (*jsonschema.Schema, error) {
+var GetJSONSchema = sync.OnceValues[*Schema, error](func() (*Schema, error) {
 	return compile(JSONSchema)
 })
 
 // compile takes raw JSON schema data and compiles it into a jsonschema.JSONSchema object.
 // It handles the compilation process including unmarshaling and resource registration.
-func compile(data []byte) (*jsonschema.Schema, error) {
+func compile(data []byte) (*Schema, error) {
 	const schemaFile = "resources/schema-2020-12.json"
 	c := jsonschema.NewCompiler()
 	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
@@ -42,7 +49,14 @@ func compile(data []byte) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile schema: %w", err)
 	}
-	return sch, nil
+	invopopSchema, err := runtime.GenerateJSONSchemaWithScheme(runtime.NewScheme(runtime.WithAllowUnknown()), Descriptor{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate invopop schema: %w", err)
+	}
+	return &Schema{
+		Schema:  *sch,
+		Invopop: *invopopSchema,
+	}, nil
 }
 
 // Validate checks if the given descriptor conforms to the JSONSchema.

@@ -99,13 +99,6 @@ type Inspector struct {
 	loopVars map[string]struct{}
 }
 
-// knownFunctions contains the list of all CEL functions that are supported
-var knownFunctions = []string{
-	"random.seededString",
-	"base64.decode",
-	"base64.encode",
-}
-
 // DefaultInspector creates a new Inspector instance with the given resources and functions.
 //
 // TODO(a-hilaly): unify CEL environment creation with the rest of the codebase.
@@ -138,15 +131,16 @@ func DefaultInspector(resources []string, functions []string) (*Inspector, error
 	}, nil
 }
 
-// NewInspectorWithEnv creates a new Inspector with the given CEL environment and resource names.
-func NewInspectorWithEnv(env *cel.Env, resources []string) *Inspector {
+// NewInspectorWithEnv creates a new Inspector instance with the given resources and functions
+// using the provided CEL environment.
+func NewInspectorWithEnv(env *cel.Env, resources []string, functions []string) *Inspector {
 	resourceMap := make(map[string]struct{})
 	for _, resource := range resources {
 		resourceMap[resource] = struct{}{}
 	}
 
 	functionMap := make(map[string]struct{})
-	for _, function := range knownFunctions {
+	for _, function := range functions {
 		functionMap[function] = struct{}{}
 	}
 

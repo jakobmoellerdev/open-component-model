@@ -10,7 +10,7 @@ import (
 
 const MaxRequestSizeBytes = uint64(3 * 1024 * 1024)
 
-func SchemaDeclTypeForInvopop(s *invopop.Schema) *DeclType {
+func DeclTypeFromInvopop(s *invopop.Schema) *DeclType {
 	return SchemaDeclType(&Schema{JSONSchema: s})
 }
 

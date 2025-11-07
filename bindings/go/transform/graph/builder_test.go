@@ -40,13 +40,15 @@ func TestGraphBuilder(t *testing.T) {
 	}
 
 	transformationGraphDefinition := `
+environment:
+  baseUrl: "ghcr.io/open-component-model/test-components"
 transformations:
 - id: download1
   type: ocm.software.download.component
   spec:
     repository:
       type: oci
-      baseUrl: "ghcr.io/open-component-model/test-components"
+      baseUrl: "${environment.baseUrl}"
     component: "mycomponent"
     version: "1.0.0"
 - id: download2
@@ -58,9 +60,9 @@ transformations:
 - id: download3
   type: ocm.software.download.component
   spec:
-	repository: "${download2.spec.repository}"
-	component: "${download2.spec.component}"
-	version: "${download2.spec.version}"
+    repository: "${download2.spec.repository}"
+    component: "${download2.spec.component}"
+    version: "${download2.spec.version}"
 `
 	// discover and process all over again
 	// 1) build graph with dependencies based on unstructured

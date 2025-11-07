@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	invopop "github.com/invopop/jsonschema"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -71,7 +72,17 @@ type RepositoryRegistry struct {
 // Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface
 var _ repository.ComponentVersionRepositoryProvider = (*RepositoryRegistry)(nil)
 
-func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecification runtime.Typed) (*invopop.Schema, error) {
+type ComponentVersionRepositorySchemas struct {
+	RepositorySchema *invopop.Schema
+	DescriptorSchema *invopop.Schema
+}
+
+func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecification runtime.Typed) (*ComponentVersionRepositorySchemas, error) {
+	descSchema, err := v2.GetJSONSchema()
+	if err != nil {
+		return nil, fmt.Errorf("could not get JSON schema for descriptor: %w", err)
+	}
+
 	// Check if this is an internal plugin first
 	_, _ = r.scheme.DefaultType(repositorySpecification)
 	typ := repositorySpecification.GetType()
@@ -84,7 +95,11 @@ func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecif
 		if err != nil {
 			return nil, fmt.Errorf("could not generate JSON schema for %T: %w", repositorySpecification, err)
 		}
-		return schema, nil
+
+		return &ComponentVersionRepositorySchemas{
+			RepositorySchema: schema,
+			DescriptorSchema: &descSchema.Invopop,
+		}, nil
 	}
 
 	// For external plugins, get the plugin and ask for identity
@@ -105,7 +120,10 @@ func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecif
 		if len(strictErrs) > 0 {
 			return nil, fmt.Errorf("JSON schema for type %v has strict unmarshal errors: %v", t.Type, strictErrs)
 		}
-		return schema, nil
+		return &ComponentVersionRepositorySchemas{
+			RepositorySchema: schema,
+			DescriptorSchema: &descSchema.Invopop,
+		}, nil
 	}
 	return nil, fmt.Errorf("failed to get JSON schema for repository specification %T of type %s", repositorySpecification, typ.String())
 }

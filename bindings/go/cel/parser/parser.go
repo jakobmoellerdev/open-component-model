@@ -74,7 +74,7 @@ func getCelType(schema *invopop.Schema) *cel.Type {
 	}
 
 	// Use the Kubernetes OpenAPI library to convert schema to CEL type
-	declType := jsonschema.SchemaDeclTypeForInvopop(schema)
+	declType := jsonschema.DeclTypeFromInvopop(schema)
 	if declType == nil {
 		return cel.DynType
 	}

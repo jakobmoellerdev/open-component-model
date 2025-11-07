@@ -60,6 +60,9 @@ func (s *Schema) AdditionalProperties() *Schema {
 	if s.JSONSchema.AdditionalProperties == jsonschema.FalseSchema {
 		return nil
 	}
+	if s.JSONSchema.AdditionalProperties == nil {
+		return nil
+	}
 	return &Schema{JSONSchema: s.JSONSchema.AdditionalProperties}
 }
 

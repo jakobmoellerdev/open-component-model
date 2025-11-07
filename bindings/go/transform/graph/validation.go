@@ -68,7 +68,7 @@ var (
 func validateResourceIDs(transformations map[string]*Transformation) error {
 	seen := make(map[string]struct{})
 	for _, transformation := range transformations {
-		meta := transformation.meta
+		meta := transformation.TransformationMeta
 		if isOCMReservedWord(meta.ID) {
 			return fmt.Errorf("id %s is a reserved keyword in OCM", meta.ID)
 		}

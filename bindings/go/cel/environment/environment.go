@@ -102,7 +102,7 @@ func DefaultEnvironment(options ...EnvOption) (*cel.Env, error) {
 		declTypes := make([]*jsonschema.DeclType, 0, len(opts.typedResources))
 
 		for name, schema := range opts.typedResources {
-			declType := jsonschema.SchemaDeclTypeForInvopop(schema)
+			declType := jsonschema.DeclTypeFromInvopop(schema)
 			if declType != nil {
 				typeName := "__type_" + name
 				declType = declType.MaybeAssignTypeName(typeName)
