@@ -10,23 +10,28 @@ func InferFromGoValue(goRuntimeVal interface{}) (*invopop.Schema, error) {
 	switch goRuntimeVal := goRuntimeVal.(type) {
 	case bool:
 		return &invopop.Schema{
-			Type: "boolean",
+			Type:  "boolean",
+			Const: goRuntimeVal,
 		}, nil
 	case int64:
 		return &invopop.Schema{
-			Type: "integer",
+			Type:  "integer",
+			Const: goRuntimeVal,
 		}, nil
 	case uint64:
 		return &invopop.Schema{
-			Type: "integer",
+			Type:  "integer",
+			Const: goRuntimeVal,
 		}, nil
 	case float64:
 		return &invopop.Schema{
-			Type: "number",
+			Type:  "number",
+			Const: goRuntimeVal,
 		}, nil
 	case string:
 		return &invopop.Schema{
-			Type: "string",
+			Type:  "string",
+			Const: goRuntimeVal,
 		}, nil
 	case []interface{}:
 		return inferArraySchema(goRuntimeVal)

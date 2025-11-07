@@ -44,7 +44,7 @@ func SchemaDeclType(s *Schema) *DeclType {
 			} else {
 				maxItems = estimateMaxArrayItemsFromMinSize(itemsType.MinSerializedSize)
 			}
-			return NewListType(itemsType, maxItems)
+			return NewListType(itemsType, maxItems).WithJSONSchema(s)
 		}
 		return nil
 	case "object":
@@ -57,7 +57,7 @@ func SchemaDeclType(s *Schema) *DeclType {
 				} else {
 					maxProperties = estimateMaxAdditionalPropertiesFromMinSize(propsType.MinSerializedSize)
 				}
-				return NewMapType(StringType, propsType, maxProperties)
+				return NewMapType(StringType, propsType, maxProperties).WithJSONSchema(s)
 			}
 			return nil
 		}
@@ -93,7 +93,7 @@ func SchemaDeclType(s *Schema) *DeclType {
 		}
 		objType := NewObjectType("object", fields)
 		objType.MinSerializedSize = minSerializedSize
-		return objType
+		return objType.WithJSONSchema(s)
 	case "string":
 		switch s.Format() {
 		case "byte":
@@ -103,19 +103,19 @@ func SchemaDeclType(s *Schema) *DeclType {
 			} else {
 				byteWithMaxLength.MaxElements = estimateMaxStringLengthPerRequest(s)
 			}
-			return byteWithMaxLength
+			return byteWithMaxLength.WithJSONSchema(s)
 		case "duration":
 			durationWithMaxLength := NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, uint64(MinDurationSizeJSON))
 			durationWithMaxLength.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return durationWithMaxLength
+			return durationWithMaxLength.WithJSONSchema(s)
 		case "date":
 			timestampWithMaxLength := NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(JSONDateSize))
 			timestampWithMaxLength.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return timestampWithMaxLength
+			return timestampWithMaxLength.WithJSONSchema(s)
 		case "date-time":
 			timestampWithMaxLength := NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, uint64(MinDatetimeSizeJSON))
 			timestampWithMaxLength.MaxElements = estimateMaxStringLengthPerRequest(s)
-			return timestampWithMaxLength
+			return timestampWithMaxLength.WithJSONSchema(s)
 		}
 
 		strWithMaxLength := NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), MinStringSize)
@@ -128,13 +128,13 @@ func SchemaDeclType(s *Schema) *DeclType {
 				strWithMaxLength.MaxElements = estimateMaxStringLengthPerRequest(s)
 			}
 		}
-		return strWithMaxLength
+		return strWithMaxLength.WithJSONSchema(s)
 	case "boolean":
-		return BoolType
+		return BoolType.WithJSONSchema(s)
 	case "number":
-		return DoubleType
+		return DoubleType.WithJSONSchema(s)
 	case "integer":
-		return IntType
+		return IntType.WithJSONSchema(s)
 	}
 	return nil
 }

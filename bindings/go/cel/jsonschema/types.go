@@ -25,7 +25,6 @@ import (
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
-
 	exprpb "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
@@ -108,6 +107,15 @@ type DeclType struct {
 	celType      *cel.Type
 	traitMask    int
 	defaultValue ref.Val
+
+	*Schema
+}
+
+func (t *DeclType) WithJSONSchema(schema *Schema) *DeclType {
+	if schema != nil {
+		t.Schema = schema
+	}
+	return t
 }
 
 // MaybeAssignTypeName attempts to set the DeclType name to a fully qualified name, if the type
@@ -154,6 +162,7 @@ func (t *DeclType) MaybeAssignTypeName(name string) *DeclType {
 			traitMask:         t.traitMask,
 			defaultValue:      t.defaultValue,
 			MinSerializedSize: t.MinSerializedSize,
+			Schema:            t.Schema,
 		}
 	}
 	if t.IsMap() {
@@ -162,7 +171,7 @@ func (t *DeclType) MaybeAssignTypeName(name string) *DeclType {
 		if updated == t.ElemType {
 			return t
 		}
-		return NewMapType(t.KeyType, updated, t.MaxElements)
+		return NewMapType(t.KeyType, updated, t.MaxElements).WithJSONSchema(t.Schema)
 	}
 	if t.IsList() {
 		elemTypeName := fmt.Sprintf("%s.@idx", name)
@@ -170,7 +179,7 @@ func (t *DeclType) MaybeAssignTypeName(name string) *DeclType {
 		if updated == t.ElemType {
 			return t
 		}
-		return NewListType(updated, t.MaxElements)
+		return NewListType(updated, t.MaxElements).WithJSONSchema(t.Schema)
 	}
 	return t
 }

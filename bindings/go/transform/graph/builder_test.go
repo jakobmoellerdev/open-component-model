@@ -41,22 +41,16 @@ func TestGraphBuilder(t *testing.T) {
 
 	transformationGraphDefinition := `
 environment:
-  baseUrl: "ghcr.io/open-component-model/test-components"
+  repository:
+    type: oci
+    baseUrl: "ghcr.io/open-component-model/test-components"
 transformations:
-- id: download1
-  type: ocm.software.download.component
-  spec:
-    repository:
-      type: oci
-      baseUrl: "${environment.baseUrl}"
-    component: "mycomponent"
-    version: "1.0.0"
 - id: download2
   type: ocm.software.download.component
   spec:
-    repository: "${download1.spec.repository}"
-    component: "${download1.spec.component}"
-    version: "${download1.spec.version}"
+    repository: "${environment.repository}"
+    component: "AAAA"
+    version: "VVVV"
 - id: download3
   type: ocm.software.download.component
   spec:

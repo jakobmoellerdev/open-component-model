@@ -2,7 +2,6 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/cel-go/cel"
@@ -11,7 +10,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/ast"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/parser"
-	"ocm.software/open-component-model/bindings/go/cel/resolver"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -71,7 +69,7 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	if err != nil {
 		return nil, err
 	}
-	env, err := builder.CurrentEnv()
+	env, _, err := builder.CurrentEnv()
 	if err != nil {
 		return nil, err
 	}
@@ -105,36 +103,24 @@ type Processor struct {
 }
 
 func (b *Processor) ProcessValue(ctx context.Context, transformation Transformation) error {
-	env, err := b.builder.CurrentEnv()
+	env, provider, err := b.builder.CurrentEnv()
 	if err != nil {
 		return err
 	}
 
-	expressionContext := map[string]any{}
-
-	for _, fieldDescriptor := range transformation.fieldDescriptors {
-		for _, expression := range fieldDescriptor.Expressions {
-			ast, issues := env.Compile(expression)
-			if issues.Err() != nil {
-				return issues.Err()
+	for i, fieldDescriptor := range transformation.fieldDescriptors {
+		if len(fieldDescriptor.Expressions) > 1 {
+			fieldDescriptor.ExpectedType = cel.StringType
+		} else {
+			for _, expression := range fieldDescriptor.Expressions {
+				ast, issues := env.Compile(expression)
+				if issues.Err() != nil {
+					return issues.Err()
+				}
+				fieldDescriptor.ExpectedType = ast.OutputType()
 			}
-
-			prog, err := env.Program(ast)
-			if err != nil {
-				return err
-			}
-			val, _, err := prog.Eval(map[string]any{})
-			if err != nil {
-				// If eval fails here the program has a dynamic variable and we need to eval later.
-				return err
-			}
-			expressionContext[expression] = val.Value()
 		}
-	}
-
-	summary := resolver.NewResolver(transformation.Spec.Data, expressionContext).Resolve(transformation.fieldDescriptors)
-	if err := summary.Error(); err != nil {
-		return err
+		transformation.fieldDescriptors[i] = fieldDescriptor
 	}
 
 	typ := transformation.GetType()
@@ -145,21 +131,39 @@ func (b *Processor) ProcessValue(ctx context.Context, transformation Transformat
 	if err != nil {
 		return fmt.Errorf("failed to create object for transformation type %s: %w", typ, err)
 	}
-	transformationJSONBytes, err := json.Marshal(&transformation)
-	if err != nil {
-		return fmt.Errorf("failed to marshal transformation json: %w", err)
-	}
-	rawTransformation := runtime.Raw{}
-	if err := json.Unmarshal(transformationJSONBytes, &rawTransformation); err != nil {
-		return fmt.Errorf("failed to unmarshal raw transformation: %w", err)
-	}
-	if err := b.transformerScheme.Convert(&rawTransformation, typedTransformation); err != nil {
-		return fmt.Errorf("failed to convert transformation to typed object: %w", err)
-	}
 
-	switch typedTransformation := typedTransformation.(type) {
+	switch typedTransformation.(type) {
 	case *transformations.DownloadComponentTransformation:
-		specSchema, outputSchema, err := downloadComponentTransformationJSONSchema(b.pluginManager, typedTransformation)
+		// lookup for typed in .repository
+
+		// switch if transformation spec field required for lookup in plugin manager is an expression in fieldDescriptors
+		// or not
+		// if no fieldDescriptor is present, then that means we already have the value anyways
+		// TODO (handle case for field path instead of struct field path)
+		var presentTypeFromExpression *cel.Type
+		for _, descriptor := range transformation.fieldDescriptors {
+			if descriptor.Path == "repository" {
+				presentTypeFromExpression = descriptor.ExpectedType
+			}
+		}
+		declTyp, ok := provider.FindDeclType(presentTypeFromExpression.TypeName())
+		if !ok {
+			return fmt.Errorf("failed to find decl type for %s", presentTypeFromExpression.TypeName())
+		}
+		typField, ok := declTyp.JSONSchema.Properties.Get("type")
+		if !ok {
+			return fmt.Errorf("failed to get type field schema declaration")
+		}
+		typFieldString, ok := typField.Const.(string)
+		if !ok {
+			return fmt.Errorf("failed to get type field const value")
+		}
+		runtimeType, err := runtime.TypeFromString(typFieldString)
+		if err != nil {
+			return fmt.Errorf("failed to get runtime type from type field const value: %w", err)
+		}
+
+		specSchema, outputSchema, err := downloadComponentTransformationJSONSchema(b.pluginManager, runtimeType)
 		if err != nil {
 			return fmt.Errorf("failed to get JSON schema for DownloadComponentTransformation: %w", err)
 		}
@@ -174,15 +178,15 @@ func (b *Processor) ProcessValue(ctx context.Context, transformation Transformat
 		transformationDeclType := jsonschema.DeclTypeFromInvopop(transformationSchema)
 		transformationDeclType = transformationDeclType.MaybeAssignTypeName("__type_" + transformation.ID)
 		b.builder.RegisterDeclTypes(transformationDeclType)
-		/*b.builder.RegisterEnvOption(cel.Variable(transformation.ID, transformationDeclType.CelType()))*/
+		b.builder.RegisterEnvOption(cel.Variable(transformation.ID, transformationDeclType.CelType()))
 
-		transformationVariable := cel.Constant(
-			transformation.ID, transformationDeclType.CelType(), types.NewStringInterfaceMap(types.DefaultTypeAdapter, map[string]any{
-				"spec":   transformation.Spec.Data,
-				"output": make(map[string]interface{}),
-			}),
-		)
-		b.builder.RegisterEnvOption(transformationVariable)
+	/*	transformationVariable := cel.Constant(
+		transformation.ID, transformationDeclType.CelType(), types.NewStringInterfaceMap(types.DefaultTypeAdapter, map[string]any{
+			"spec":   transformation.Spec.Data,
+			"output": make(map[string]interface{}),
+		}),
+	)*/
+	/*b.builder.RegisterEnvOption(transformationVariable)*/
 	default:
 		return fmt.Errorf("unsupported transformation type %s", typ)
 	}
@@ -192,19 +196,19 @@ func (b *Processor) ProcessValue(ctx context.Context, transformation Transformat
 
 func downloadComponentTransformationJSONSchema(
 	pluginManager *manager.PluginManager,
-	typedTransformation *transformations.DownloadComponentTransformation,
+	typ runtime.Type,
 ) (*invopop.Schema, *invopop.Schema, error) {
 	// first convert repos
-	descriptorSchemas, err := pluginManager.ComponentVersionRepositoryRegistry.GetJSONSchema(context.TODO(), typedTransformation.Spec.Repository)
+	descriptorSchemas, err := pluginManager.ComponentVersionRepositoryRegistry.GetJSONSchema(context.TODO(), typ)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get JSON schema for repository %s: %w", typedTransformation.Spec.Repository, err)
+		return nil, nil, fmt.Errorf("failed to get JSON schema for repository %s: %w", typ, err)
 	}
 	reflector := invopop.Reflector{
 		DoNotReference: true,
 		Anonymous:      true,
 		IgnoredTypes:   []any{&runtime.Raw{}},
 	}
-	transformationSpecJSONSchema := reflector.Reflect(typedTransformation.Spec)
+	transformationSpecJSONSchema := reflector.Reflect(&transformations.DownloadComponentTransformation{})
 	transformationSpecJSONSchema.Properties.Set("repository", descriptorSchemas.RepositorySchema)
 	return transformationSpecJSONSchema, descriptorSchemas.DescriptorSchema, nil
 }
@@ -240,19 +244,19 @@ func (envBuilder *EnvBuilder) RegisterEnvOption(envOptions ...cel.EnvOption) *En
 	return envBuilder
 }
 
-func (envBuilder *EnvBuilder) CurrentEnv() (*cel.Env, error) {
+func (envBuilder *EnvBuilder) CurrentEnv() (*cel.Env, *jsonschema.DeclTypeProvider, error) {
 	baseEnv, err := cel.NewEnv()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	provider := jsonschema.NewDeclTypeProvider(envBuilder.declTypes...)
 	opts, err := provider.EnvOptions(baseEnv.CELTypeProvider())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	newEnv, err := baseEnv.Extend(append(opts, envBuilder.envOptions...)...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return newEnv, nil
+	return newEnv, provider, nil
 }

@@ -77,23 +77,19 @@ type ComponentVersionRepositorySchemas struct {
 	DescriptorSchema *invopop.Schema
 }
 
-func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecification runtime.Typed) (*ComponentVersionRepositorySchemas, error) {
+func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, specType runtime.Type) (*ComponentVersionRepositorySchemas, error) {
 	descSchema, err := v2.GetJSONSchema()
 	if err != nil {
 		return nil, fmt.Errorf("could not get JSON schema for descriptor: %w", err)
 	}
-
-	// Check if this is an internal plugin first
-	_, _ = r.scheme.DefaultType(repositorySpecification)
-	typ := repositorySpecification.GetType()
-	if ok := r.scheme.IsRegistered(typ); ok {
-		obj, err := r.scheme.NewObject(typ)
+	if ok := r.scheme.IsRegistered(specType); ok {
+		obj, err := r.scheme.NewObject(specType)
 		if err != nil {
-			return nil, fmt.Errorf("could not create new object for type %v: %w", typ, err)
+			return nil, fmt.Errorf("could not create new object for type %v: %w", specType, err)
 		}
 		schema, err := runtime.GenerateJSONSchemaWithScheme(r.scheme, obj)
 		if err != nil {
-			return nil, fmt.Errorf("could not generate JSON schema for %T: %w", repositorySpecification, err)
+			return nil, fmt.Errorf("could not generate JSON schema for %T: %w", specType, err)
 		}
 
 		return &ComponentVersionRepositorySchemas{
@@ -103,13 +99,13 @@ func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecif
 	}
 
 	// For external plugins, get the plugin and ask for identity
-	plugin, ok := r.registry[typ]
+	plugin, ok := r.registry[specType]
 	if !ok {
-		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
+		return nil, fmt.Errorf("failed to get plugin for typ %q", specType)
 	}
 	types := plugin.Types[mtypes.ComponentVersionRepositoryPluginType]
 	for _, t := range types {
-		if t.Type != typ {
+		if t.Type != specType {
 			continue
 		}
 		schema := &invopop.Schema{}
@@ -125,7 +121,7 @@ func (r *RepositoryRegistry) GetJSONSchema(ctx context.Context, repositorySpecif
 			DescriptorSchema: &descSchema.Invopop,
 		}, nil
 	}
-	return nil, fmt.Errorf("failed to get JSON schema for repository specification %T of type %s", repositorySpecification, typ.String())
+	return nil, fmt.Errorf("failed to get JSON schema for repository specificationof type %s", specType)
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
