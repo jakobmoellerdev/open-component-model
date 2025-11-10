@@ -62,7 +62,7 @@ func OcmCelEnv() error {
 	}
 
 	outputType := ast.OutputType()
-	expectedType := fieldDesc[0].ExpectedType
+	expectedType := fieldDesc[0].OutputType
 	if !expectedType.IsAssignableType(outputType) {
 		return fmt.Errorf("expected type %v but got %v", expectedType, outputType)
 	}

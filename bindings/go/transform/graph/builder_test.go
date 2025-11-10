@@ -85,6 +85,7 @@ transformations:
     component: "B"
     version: "2.0.0"
 `
+
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
 	graph, err := builder.NewTransferGraph(tgd)
@@ -152,4 +153,31 @@ transformations:
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
 	_, err := builder.NewTransferGraph(tgd)
 	r.Error(err)
+}
+
+func TestGraphBuilder_TypeChecksStaticValuesAgainstDiscoveredSchema(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	yamlSrc := `
+environment:
+  repository:
+    type: oci
+    baseUrl: "ghcr.io/test"
+transformations:
+- id: download
+  type: ocm.software.download.component
+  spec:
+    repository:
+      type: ${environment.repository.type}
+      baseUrl: ${environment.repository.baseUrl}
+      nonExistentField: 1234
+    component: "A"
+    version: "1.0.0"
+`
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
+	graph, err := builder.NewTransferGraph(tgd)
+	r.NoError(err)
+	r.NotNil(graph)
 }

@@ -61,7 +61,7 @@ func parseSchemalessResource(resource interface{}, path string) ([]FieldDescript
 			expr = strings.TrimSuffix(expr, "}")
 			expressionsFields = append(expressionsFields, FieldDescriptor{
 				Expressions:          []string{expr},
-				ExpectedType:         cel.DynType, // No schema, so we use dynamic type
+				OutputType:           cel.DynType, // No schema, so we use dynamic type
 				Path:                 path,
 				StandaloneExpression: true,
 			})
@@ -72,9 +72,9 @@ func parseSchemalessResource(resource interface{}, path string) ([]FieldDescript
 			}
 			if len(expressions) > 0 {
 				expressionsFields = append(expressionsFields, FieldDescriptor{
-					Expressions:  expressions,
-					ExpectedType: cel.StringType, // String templates always produce strings
-					Path:         path,
+					Expressions: expressions,
+					OutputType:  cel.StringType, // String templates always produce strings
+					Path:        path,
 				})
 			}
 		}

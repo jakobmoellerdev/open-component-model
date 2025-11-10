@@ -219,7 +219,7 @@ func parseString(field string, schema *invopop.Schema, path string, expectedType
 		expr = strings.TrimSuffix(expr, "}")
 		return []FieldDescriptor{{
 			Expressions:          []string{expr},
-			ExpectedType:         expectedType,
+			OutputType:           expectedType,
 			Path:                 path,
 			StandaloneExpression: true,
 		}}, nil
@@ -236,9 +236,9 @@ func parseString(field string, schema *invopop.Schema, path string, expectedType
 	if len(expressions) > 0 {
 		// String templates always produce strings
 		return []FieldDescriptor{{
-			Expressions:  expressions,
-			ExpectedType: cel.StringType,
-			Path:         path,
+			Expressions: expressions,
+			OutputType:  cel.StringType,
+			Path:        path,
 		}}, nil
 	}
 	return nil, nil

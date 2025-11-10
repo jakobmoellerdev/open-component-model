@@ -100,15 +100,17 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	}
 
 	for i, fieldDescriptor := range transformation.fieldDescriptors {
+		for _, expression := range fieldDescriptor.Expressions {
+			ast, issues := env.Compile(expression)
+			if issues.Err() != nil {
+				return issues.Err()
+			}
+			fieldDescriptor.OutputType = ast.OutputType()
+		}
 		if len(fieldDescriptor.Expressions) > 1 {
 			fieldDescriptor.ExpectedType = cel.StringType
-		} else {
-			for _, expression := range fieldDescriptor.Expressions {
-				ast, issues := env.Compile(expression)
-				if issues.Err() != nil {
-					return issues.Err()
-				}
-				fieldDescriptor.ExpectedType = ast.OutputType()
+			if !fieldDescriptor.OutputType.IsEquivalentType(cel.StringType) {
+				return fmt.Errorf("field descriptor with multiple expressions must have string output type, got %s", fieldDescriptor.OutputType)
 			}
 		}
 		transformation.fieldDescriptors[i] = fieldDescriptor
@@ -143,6 +145,15 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	b.builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
 	transformation.declType = declType
 
+	specSchema, ok := declType.JSONSchema.Properties.Get("spec")
+	if !ok {
+		return fmt.Errorf("transformation declType has no spec property")
+	}
+	validatedFieldDescriptors, err := parser.ParseResource(transformation.Spec.Data, specSchema)
+	if err != nil {
+		return fmt.Errorf("validate transformation resource against schema: %w", err)
+	}
+	transformation.fieldDescriptors = validatedFieldDescriptors
 	return nil
 }
 
@@ -212,7 +223,7 @@ func runtimeTypesFromTransformation(
 					}
 					best = ast.OutputType()
 				} else {
-					best = fd.ExpectedType
+					best = fd.OutputType
 				}
 				bestRank = mr
 			}
