@@ -31,17 +31,21 @@ type FieldDescriptor struct {
 	// arrays and native types, we can use a string to represent the path.
 	Path string
 	// Expressions is a list of CEL expressions in the field.
-	Expressions []string
-	// OutputType is the expected CEL type of the field, derived from the OpenAPI schema.
+	Expressions []Expression
+	// ExpectedType is the expected CEL type of the field, derived from the OpenAPI schema.
 	// For single expressions, this is the schema's CEL type.
 	// For multiple expressions (string templates), this is always cel.StringType.
-	OutputType *cel.Type
-
 	ExpectedType *cel.Type
+
 	// StandaloneExpression is true if the field contains a single CEL expression
 	// that is not part of a larger string. example: "${foo}" is a standalone expression
 	// but not "hello-${foo}" or "${foo}${bar}"
 	StandaloneExpression bool
+}
+
+type Expression struct {
+	String string
+	AST    *cel.Ast
 }
 
 // TransformationField ResourceVariable represents a variable in a resource. Variables are any

@@ -33,11 +33,11 @@ type DownloadComponentTransformationSpec struct {
 }
 
 func (*DownloadComponentTransformation) NestedTypedFields() []string {
-	return []string{"spec.repository"}
+	return []string{"repository"}
 }
 
 func (t *DownloadComponentTransformation) NewDeclType(pm *manager.PluginManager, nestedFieldTypes map[string]runtime.Type) (*jsonschema.DeclType, error) {
-	repoFieldType, ok := nestedFieldTypes["spec.repository"]
+	repoFieldType, ok := nestedFieldTypes["repository"]
 	if !ok {
 		return nil, fmt.Errorf("missing nested field type for spec.repository")
 	}

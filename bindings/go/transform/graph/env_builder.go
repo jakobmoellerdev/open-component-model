@@ -38,7 +38,9 @@ func (envBuilder *EnvBuilder) RegisterEnvOption(envOptions ...cel.EnvOption) *En
 }
 
 func (envBuilder *EnvBuilder) CurrentEnv() (*cel.Env, *jsonschema.DeclTypeProvider, error) {
-	baseEnv, err := cel.NewEnv()
+	baseEnv, err := cel.NewEnv(
+		cel.OptionalTypes(),
+	)
 	if err != nil {
 		return nil, nil, err
 	}

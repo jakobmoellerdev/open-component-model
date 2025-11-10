@@ -109,7 +109,7 @@ func (r *Resolver) resolveField(field parser.FieldDescriptor) ResolutionResult {
 	}
 
 	if field.StandaloneExpression {
-		resolvedValue, ok := r.data[field.Expressions[0]]
+		resolvedValue, ok := r.data[field.Expressions[0].String]
 		if !ok {
 			result.Error = fmt.Errorf("no data provided for expression: %s", field.Expressions[0])
 			return result
@@ -130,12 +130,12 @@ func (r *Resolver) resolveField(field parser.FieldDescriptor) ResolutionResult {
 
 		replaced := strValue
 		for _, expr := range field.Expressions {
-			replacement, ok := r.data[expr]
+			replacement, ok := r.data[expr.String]
 			if !ok {
 				result.Error = fmt.Errorf("no data provided for expression: %s", expr)
 				return result
 			}
-			replaced = strings.Replace(replaced, "${"+expr+"}", fmt.Sprintf("%v", replacement), -1)
+			replaced = strings.Replace(replaced, "${"+expr.String+"}", fmt.Sprintf("%v", replacement), -1)
 		}
 
 		err = r.setValueAtPath(field.Path, replaced)

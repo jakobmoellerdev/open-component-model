@@ -218,8 +218,13 @@ func parseString(field string, schema *invopop.Schema, path string, expectedType
 		expr := strings.TrimPrefix(field, "${")
 		expr = strings.TrimSuffix(expr, "}")
 		return []FieldDescriptor{{
-			Expressions:          []string{expr},
-			OutputType:           expectedType,
+			Expressions: []Expression{
+				{
+					String: expr,
+					AST:    nil,
+				},
+			},
+			ExpectedType:         expectedType,
 			Path:                 path,
 			StandaloneExpression: true,
 		}}, nil
@@ -233,12 +238,19 @@ func parseString(field string, schema *invopop.Schema, path string, expectedType
 	if err != nil {
 		return nil, err
 	}
+	exprs := make([]Expression, len(expressions))
+	for i, expr := range expressions {
+		exprs[i] = Expression{
+			String: expr,
+			AST:    nil,
+		}
+	}
 	if len(expressions) > 0 {
 		// String templates always produce strings
 		return []FieldDescriptor{{
-			Expressions: expressions,
-			OutputType:  cel.StringType,
-			Path:        path,
+			Expressions:  exprs,
+			ExpectedType: cel.StringType,
+			Path:         path,
 		}}, nil
 	}
 	return nil, nil

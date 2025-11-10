@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cel
+package environment
 
 import (
 	"errors"
@@ -75,7 +75,7 @@ func WouldMatchIfUnwrapped(outputType, expectedType *cel.Type) bool {
 
 	// If output is already assignable to expected, no mismatch
 	if expectedType.IsAssignableType(outputType) {
-		return false
+		return true
 	}
 
 	// Check if wrapping expected in optional makes it match output

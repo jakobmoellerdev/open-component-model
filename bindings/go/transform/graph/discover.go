@@ -27,9 +27,9 @@ func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[st
 		if _, exists := transformations[transformation.ID]; exists {
 			return nil, fmt.Errorf("duplicate transformation ID %s", transformation.ID)
 		}
-		for i, fd := range fieldDescriptors {
-			fieldDescriptors[i].Path = fmt.Sprintf("spec.%s", fd.Path)
-		}
+		//for i, fd := range fieldDescriptors {
+		//	fieldDescriptors[i].Path = fmt.Sprintf("spec.%s", fd.Path)
+		//}
 
 		transformations[transformation.ID] = Transformation{
 			GenericTransformation: transformation,
@@ -71,9 +71,9 @@ func discoverExpressions(
 ) ([]ast.ExpressionInspection, error) {
 	expressionInspections := make([]ast.ExpressionInspection, 0, len(fieldDescriptor.Expressions))
 	for _, expression := range fieldDescriptor.Expressions {
-		inspection, err := inspector.Inspect(expression)
+		inspection, err := inspector.Inspect(expression.String)
 		if err != nil {
-			return nil, fmt.Errorf("failed to inspect expression %q: %w", expression, err)
+			return nil, fmt.Errorf("failed to inspect expression %q: %w", expression.String, err)
 		}
 		for _, dependency := range inspection.ResourceDependencies {
 			if !graph.Contains(dependency.ID) {

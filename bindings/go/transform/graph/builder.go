@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"ocm.software/open-component-model/bindings/go/cel/ast"
+	"ocm.software/open-component-model/bindings/go/cel/environment"
 	"ocm.software/open-component-model/bindings/go/cel/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/parser"
@@ -14,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations"
 )
 
 const (
@@ -25,6 +27,7 @@ type Transformation struct {
 	fieldDescriptors []parser.FieldDescriptor
 	expressions      []ast.ExpressionInspection
 	order            int
+	prototype        runtime.Typed
 
 	declType *jsonschema.DeclType
 }
@@ -69,16 +72,34 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 
 	synced := syncdag.ToSyncedGraph(graph)
 
-	processor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
-		Processor: &StaticPluginAnalysisProcessor{
-			builder:           builder,
-			transformerScheme: b.transformerScheme,
-			pluginManager:     b.pm,
-		},
+	pluginProcessor := &StaticPluginAnalysisProcessor{
+		builder:                 builder,
+		transformerScheme:       b.transformerScheme,
+		pluginManager:           b.pm,
+		analyzedTransformations: make(map[string]Transformation),
+	}
+
+	staticAnalysisProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
+		Processor:   pluginProcessor,
 		Concurrency: 1,
 	})
 
-	if err := processor.Process(context.TODO()); err != nil {
+	if err := staticAnalysisProcessor.Process(context.TODO()); err != nil {
+		return nil, err
+	}
+
+	for _, vertex := range graph.Vertices {
+		vertex.Attributes[syncdag.AttributeValue] = pluginProcessor.analyzedTransformations[vertex.ID]
+	}
+
+	runtimeEvaluationProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
+		Processor: &RuntimeEvaluationProcessor{
+			builder:       builder,
+			pluginManager: b.pm,
+		},
+		Concurrency: 1,
+	})
+	if err := runtimeEvaluationProcessor.Process(context.TODO()); err != nil {
 		return nil, err
 	}
 
@@ -87,10 +108,50 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	}, nil
 }
 
+type RuntimeEvaluationProcessor struct {
+	pluginManager   *manager.PluginManager
+	builder         *EnvBuilder
+	transformations map[string]Transformation
+}
+
+func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
+	env, _, err := b.builder.CurrentEnv()
+	if err != nil {
+		return err
+	}
+	switch transformation.prototype.(type) {
+	case *transformations.DownloadComponentTransformation:
+		for _, fieldDescriptor := range transformation.fieldDescriptors {
+			for _, expression := range fieldDescriptor.Expressions {
+				program, err := env.Program(expression.AST)
+				if err != nil {
+					return fmt.Errorf(": %w", err)
+				}
+				result, _, err := program.Eval(map[string]interface{}{})
+				if err != nil {
+					return fmt.Errorf("failed to evaluate expression %q: %w", expression.String, err)
+				}
+				_ = result
+				// 1) use result with resolver to replace cel expressions with values
+				// 2) we now have the complete spec. call transformer with that spec and write the
+				//    call result into output
+				// 3) write whole variable (spec + output) into a variable and add it under the
+				//    transformation ID to the expression context
+
+			}
+		}
+		return nil
+	default:
+		return nil
+	}
+
+}
+
 type StaticPluginAnalysisProcessor struct {
-	transformerScheme *runtime.Scheme
-	pluginManager     *manager.PluginManager
-	builder           *EnvBuilder
+	transformerScheme       *runtime.Scheme
+	pluginManager           *manager.PluginManager
+	builder                 *EnvBuilder
+	analyzedTransformations map[string]Transformation
 }
 
 func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
@@ -100,18 +161,12 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	}
 
 	for i, fieldDescriptor := range transformation.fieldDescriptors {
-		for _, expression := range fieldDescriptor.Expressions {
-			ast, issues := env.Compile(expression)
+		for j, expression := range fieldDescriptor.Expressions {
+			ast, issues := env.Compile(expression.String)
 			if issues.Err() != nil {
 				return issues.Err()
 			}
-			fieldDescriptor.OutputType = ast.OutputType()
-		}
-		if len(fieldDescriptor.Expressions) > 1 {
-			fieldDescriptor.ExpectedType = cel.StringType
-			if !fieldDescriptor.OutputType.IsEquivalentType(cel.StringType) {
-				return fmt.Errorf("field descriptor with multiple expressions must have string output type, got %s", fieldDescriptor.OutputType)
-			}
+			fieldDescriptor.Expressions[j].AST = ast
 		}
 		transformation.fieldDescriptors[i] = fieldDescriptor
 	}
@@ -124,6 +179,7 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	if err != nil {
 		return fmt.Errorf("failed to create object for transformation type %s: %w", typ, err)
 	}
+	transformation.prototype = typedTransformation
 
 	v1alpha1Transformation, ok := typedTransformation.(v1alpha1.Transformation)
 	if !ok {
@@ -153,7 +209,22 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	if err != nil {
 		return fmt.Errorf("validate transformation resource against schema: %w", err)
 	}
+	for i, fieldDescriptor := range transformation.fieldDescriptors {
+		for j, expression := range fieldDescriptor.Expressions {
+			if !environment.WouldMatchIfUnwrapped(expression.AST.OutputType(), validatedFieldDescriptors[i].ExpectedType) {
+				return fmt.Errorf("expression output type %s is not assignable to expected type %s for path %s based on schema",
+					expression.AST.OutputType().TypeName(),
+					validatedFieldDescriptors[i].ExpectedType.TypeName(),
+					fieldDescriptor.Path,
+				)
+			}
+			validatedFieldDescriptors[i].Expressions[j].AST = expression.AST
+		}
+	}
 	transformation.fieldDescriptors = validatedFieldDescriptors
+
+	b.analyzedTransformations[transformation.ID] = transformation
+
 	return nil
 }
 
@@ -212,9 +283,10 @@ func runtimeTypesFromTransformation(
 
 			if mr := matchSegments(typedSegs, descSegs); mr != matchNone && mr > bestRank {
 				if mr == matchChild {
-					childExpression, err := fieldpath.Parse(fd.Expressions[0])
+					// TODO(fabianburth): check how or whether we want to deal with multiple expressions here
+					childExpression, err := fieldpath.Parse(fd.Expressions[0].String)
 					if err != nil {
-						return nil, fmt.Errorf("parse child expression %q: %w", fd.Expressions[0], err)
+						return nil, fmt.Errorf("parse child expression %q: %w", fd.Expressions[0].String, err)
 					}
 					parentExpression := fieldpath.Build(childExpression[:len(childExpression)-1])
 					ast, issues := env.Compile(parentExpression)
@@ -223,7 +295,7 @@ func runtimeTypesFromTransformation(
 					}
 					best = ast.OutputType()
 				} else {
-					best = fd.OutputType
+					best = fd.ExpectedType
 				}
 				bestRank = mr
 			}
@@ -254,6 +326,19 @@ func runtimeTypesFromTransformation(
 	// No dependency ⇒ use static type from transformation itself.
 	if !foundDependency {
 		// TODO use static type by going into the unstructured transformation and reading the field descriptor
+		rt, err := GetValueFromPath(transformation.Spec.Data, fmt.Sprintf("%s.type", typedFields[0]))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get static runtime type for transformation %q: %w", transformation.ID, err)
+		}
+		rtStr, ok := rt.(string)
+		if !ok {
+			return nil, fmt.Errorf("static runtime type for transformation %q is not a string", transformation.ID)
+		}
+		parsedType, err := runtime.TypeFromString(rtStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid static runtime type %q for transformation %q: %w", rtStr, transformation.ID, err)
+		}
+		typCandidate = &parsedType
 	}
 
 	if typCandidate == nil {
