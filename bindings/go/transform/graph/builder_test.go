@@ -15,56 +15,141 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func TestGraphBuilder(t *testing.T) {
-	r := require.New(t)
-
+func newTestBuilder(t *testing.T) *Builder {
+	t.Helper()
 	transformerScheme := runtime.NewScheme()
-	r.NoError(transformerScheme.RegisterWithAlias(&transformations.DownloadComponentTransformation{}, runtime.NewUnversionedType(transformations.DownloadComponentTransformationType)))
+	require.NoError(t, transformerScheme.RegisterWithAlias(
+		&transformations.DownloadComponentTransformation{},
+		runtime.NewUnversionedType(transformations.DownloadComponentTransformationType),
+	))
 
-	pluginManagerScheme := runtime.NewScheme()
-	repository.MustAddToScheme(pluginManagerScheme)
-
-	pluginManager := manager.NewPluginManager(t.Context())
-	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider()
-
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		pluginManagerScheme,
-		pluginManager.ComponentVersionRepositoryRegistry,
-		CachingComponentVersionRepositoryProvider,
+	pm := manager.NewPluginManager(t.Context())
+	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	repoScheme := runtime.NewScheme()
+	repository.MustAddToScheme(repoScheme)
+	require.NoError(t, componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+		repoScheme,
+		pm.ComponentVersionRepositoryRegistry,
+		repoProvider,
 		&ociv1.Repository{},
 	))
 
-	builder := &Builder{
+	return &Builder{
 		transformerScheme: transformerScheme,
-		pm:                pluginManager,
+		pm:                pm,
 	}
+}
 
-	transformationGraphDefinition := `
+// ${environment.repository.type} interpolation
+func TestGraphBuilder_InterpolatesEnvironmentRepositoryType(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	yamlSrc := `
 environment:
   repository:
     type: oci
-    baseUrl: "ghcr.io/open-component-model/test-components"
+    baseUrl: "ghcr.io/test"
 transformations:
-- id: download2
+- id: download
   type: ocm.software.download.component
   spec:
-    repository: "${environment.repository}"
-    component: "AAAA"
-    version: "VVVV"
-- id: download3
-  type: ocm.software.download.component
-  spec:
-    repository: "${download2.spec.repository}"
-    component: "${download2.spec.component}"
-    version: "${download2.spec.version}"
+    repository:
+      type: ${environment.repository.type}
+      baseUrl: ${environment.repository.baseUrl}
+    component: "A"
+    version: "1.0.0"
 `
-	// discover and process all over again
-	// 1) build graph with dependencies based on unstructured
-	// 2) build each node in topological order with context of previous nodes
-	// 3) execute
 	tgd := &v1alpha1.TransformationGraphDefinition{}
-	r.NoError(yaml.Unmarshal([]byte(transformationGraphDefinition), tgd))
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
 	graph, err := builder.NewTransferGraph(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
+}
+
+// ${environment.repository} whole object substitution
+func TestGraphBuilder_SubstitutesFullEnvironmentRepository(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	yamlSrc := `
+environment:
+  repository:
+    type: oci
+    baseUrl: "ghcr.io/fullrepo"
+transformations:
+- id: download
+  type: ocm.software.download.component
+  spec:
+    repository: "${environment.repository}"
+    component: "B"
+    version: "2.0.0"
+`
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
+	graph, err := builder.NewTransferGraph(tgd)
+	r.NoError(err)
+	r.NotNil(graph)
+	r.Len(graph.checked.Vertices, 1)
+
+}
+
+// cross-node field reference ${first.spec.repository}
+func TestGraphBuilder_CrossNodeFieldReference(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	// ocm transfer cv sourcerepo//component:1.0.0 targetrepo
+	// 1. first prefetch component tree
+	// 2. translate component tree to transfer specification
+	yamlSrc := `
+environment:
+  repository:
+    type: oci
+    baseUrl: "ghcr.io/crossnode"
+transformations:
+- id: first
+  type: ocm.software.download.component
+  spec:
+    // download component version plugin
+    // needs a repository spec
+    // repository spec => backed by JSON Schema
+    repository: "${environment.repository}"
+    component: "C"
+    version: "3.0.0"
+- id: second
+  type: ocm.software.download.component
+  spec:
+    repository: 
+      // contains the same schema for repository as first
+      type: ${first.spec.repository.type}
+      baseUrl: ${first.spec.repository.baseUrl}"
+    component: "${first.spec.component}"
+    version: "${first.spec.version}"
+`
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
+	graph, err := builder.NewTransferGraph(tgd)
+	r.NoError(err)
+	r.NotNil(graph)
+}
+
+// invalid environment reference
+func TestGraphBuilder_InvalidEnvironmentReferenceFails(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	yamlSrc := `
+transformations:
+- id: bad
+  type: ocm.software.download.component
+  spec:
+    repository: "${environment.missing}"
+    component: "Z"
+    version: "1.0.0"
+`
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
+	_, err := builder.NewTransferGraph(tgd)
+	r.Error(err)
 }

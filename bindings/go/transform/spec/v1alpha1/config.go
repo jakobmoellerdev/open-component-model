@@ -11,6 +11,13 @@ type TransformationGraphDefinition struct {
 	Transformations []GenericTransformation `json:"transformations"`
 }
 
+func (tgd *TransformationGraphDefinition) GetEnvironmentData() map[string]interface{} {
+	if tgd.Environment == nil {
+		return nil
+	}
+	return tgd.Environment.Data
+}
+
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true

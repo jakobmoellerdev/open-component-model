@@ -123,7 +123,7 @@ func getTypeEnum(scheme *Scheme, obj Typed) (*jsonschema.Schema, error) {
 		return nil, fmt.Errorf("cannot generate JSON schema for object with unknown type: %s", obj.GetType())
 	}
 	typEnum := make([]any, 0, len(typs)+1)
-	typEnum = append(typEnum, obj.GetType())
+	typEnum = append(typEnum, obj.GetType().String())
 	for _, typ := range typs {
 		typEnum = append(typEnum, typ.String())
 	}

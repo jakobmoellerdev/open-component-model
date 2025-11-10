@@ -27,6 +27,9 @@ func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[st
 		if _, exists := transformations[transformation.ID]; exists {
 			return nil, fmt.Errorf("duplicate transformation ID %s", transformation.ID)
 		}
+		for i, fd := range fieldDescriptors {
+			fieldDescriptors[i].Path = fmt.Sprintf("spec.%s", fd.Path)
+		}
 
 		transformations[transformation.ID] = Transformation{
 			GenericTransformation: transformation,

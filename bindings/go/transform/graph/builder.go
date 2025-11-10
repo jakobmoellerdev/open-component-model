@@ -5,9 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types"
-	invopop "github.com/invopop/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/ast"
+	"ocm.software/open-component-model/bindings/go/cel/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/parser"
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -15,7 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	transformations "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations"
 )
 
 const (
@@ -24,10 +22,11 @@ const (
 
 type Transformation struct {
 	v1alpha1.GenericTransformation
-	specSchema       *invopop.Schema
 	fieldDescriptors []parser.FieldDescriptor
 	expressions      []ast.ExpressionInspection
 	order            int
+
+	declType *jsonschema.DeclType
 }
 
 type Builder struct {
@@ -36,7 +35,11 @@ type Builder struct {
 	pm *manager.PluginManager
 }
 
-func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinition) (any, error) {
+type Graph struct {
+	checked *dag.DirectedAcyclicGraph[string]
+}
+
+func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinition) (*Graph, error) {
 	tgd := original.DeepCopy()
 
 	nodes, err := getTransformationNodes(tgd)
@@ -50,22 +53,8 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 			return nil, err
 		}
 	}
-	/*
-		ast, issues := celenv.Compile("environment.baseUrl")
-		if issues.Err() != nil {
-			return nil, issues.Err()
-		}
-		prog, err := celenv.Program(ast)
-		if err != nil {
-			return nil, err
-		}
-		val, _, err := prog.Eval(map[string]any{})
-		if err != nil {
-			return nil, err
-		}
-		_ = val*/
 
-	builder, err := NewEnvBuilder(tgd.Environment.Data)
+	builder, err := NewEnvBuilder(tgd.GetEnvironmentData())
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +70,7 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	synced := syncdag.ToSyncedGraph(graph)
 
 	processor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
-		Processor: &Processor{
+		Processor: &StaticPluginAnalysisProcessor{
 			builder:           builder,
 			transformerScheme: b.transformerScheme,
 			pluginManager:     b.pm,
@@ -93,16 +82,18 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 		return nil, err
 	}
 
-	return nil, nil
+	return &Graph{
+		checked: graph,
+	}, nil
 }
 
-type Processor struct {
+type StaticPluginAnalysisProcessor struct {
 	transformerScheme *runtime.Scheme
 	pluginManager     *manager.PluginManager
 	builder           *EnvBuilder
 }
 
-func (b *Processor) ProcessValue(ctx context.Context, transformation Transformation) error {
+func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
 	env, provider, err := b.builder.CurrentEnv()
 	if err != nil {
 		return err
@@ -132,131 +123,134 @@ func (b *Processor) ProcessValue(ctx context.Context, transformation Transformat
 		return fmt.Errorf("failed to create object for transformation type %s: %w", typ, err)
 	}
 
-	switch typedTransformation.(type) {
-	case *transformations.DownloadComponentTransformation:
-		// lookup for typed in .repository
-
-		// switch if transformation spec field required for lookup in plugin manager is an expression in fieldDescriptors
-		// or not
-		// if no fieldDescriptor is present, then that means we already have the value anyways
-		// TODO (handle case for field path instead of struct field path)
-		var presentTypeFromExpression *cel.Type
-		for _, descriptor := range transformation.fieldDescriptors {
-			if descriptor.Path == "repository" {
-				presentTypeFromExpression = descriptor.ExpectedType
-			}
-		}
-		declTyp, ok := provider.FindDeclType(presentTypeFromExpression.TypeName())
-		if !ok {
-			return fmt.Errorf("failed to find decl type for %s", presentTypeFromExpression.TypeName())
-		}
-		typField, ok := declTyp.JSONSchema.Properties.Get("type")
-		if !ok {
-			return fmt.Errorf("failed to get type field schema declaration")
-		}
-		typFieldString, ok := typField.Const.(string)
-		if !ok {
-			return fmt.Errorf("failed to get type field const value")
-		}
-		runtimeType, err := runtime.TypeFromString(typFieldString)
-		if err != nil {
-			return fmt.Errorf("failed to get runtime type from type field const value: %w", err)
-		}
-
-		specSchema, outputSchema, err := downloadComponentTransformationJSONSchema(b.pluginManager, runtimeType)
-		if err != nil {
-			return fmt.Errorf("failed to get JSON schema for DownloadComponentTransformation: %w", err)
-		}
-
-		transformationSchema := &invopop.Schema{
-			Type:       "object",
-			Properties: invopop.NewProperties(),
-			Required:   []string{"spec", "output"},
-		}
-		transformationSchema.Properties.Set("spec", specSchema)
-		transformationSchema.Properties.Set("output", outputSchema)
-		transformationDeclType := jsonschema.DeclTypeFromInvopop(transformationSchema)
-		transformationDeclType = transformationDeclType.MaybeAssignTypeName("__type_" + transformation.ID)
-		b.builder.RegisterDeclTypes(transformationDeclType)
-		b.builder.RegisterEnvOption(cel.Variable(transformation.ID, transformationDeclType.CelType()))
-
-	/*	transformationVariable := cel.Constant(
-		transformation.ID, transformationDeclType.CelType(), types.NewStringInterfaceMap(types.DefaultTypeAdapter, map[string]any{
-			"spec":   transformation.Spec.Data,
-			"output": make(map[string]interface{}),
-		}),
-	)*/
-	/*b.builder.RegisterEnvOption(transformationVariable)*/
-	default:
-		return fmt.Errorf("unsupported transformation type %s", typ)
+	v1alpha1Transformation, ok := typedTransformation.(v1alpha1.Transformation)
+	if !ok {
+		return fmt.Errorf("transformation type %s is not a valid spec transformation", typ)
 	}
+	v1alpha1Transformation.GetTransformationMeta().ID = transformation.ID
+
+	runtimeTypes, err := runtimeTypesFromTransformation(env, transformation, v1alpha1Transformation, provider)
+	if err != nil {
+		return err
+	}
+
+	// Shared schema construction + registration.
+	declType, err := v1alpha1Transformation.NewDeclType(b.pluginManager, runtimeTypes)
+	if err != nil {
+		return err
+	}
+	b.builder.RegisterDeclTypes(declType)
+	b.builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
+	transformation.declType = declType
 
 	return nil
 }
 
-func downloadComponentTransformationJSONSchema(
-	pluginManager *manager.PluginManager,
-	typ runtime.Type,
-) (*invopop.Schema, *invopop.Schema, error) {
-	// first convert repos
-	descriptorSchemas, err := pluginManager.ComponentVersionRepositoryRegistry.GetJSONSchema(context.TODO(), typ)
+// ResolveRuntimeType determines the runtime.Type for a typed field
+// given a declType schema, the typed field path, the descriptor path, and their match relation.
+// - For matchEqual or matchPrefix: reads the discriminator from the typed field schema.
+// - For matchChild: reads the discriminator from the parent of the child field (i.e. descriptor[:-1]).
+// - Returns nil for other relations.
+func ResolveRuntimeType(
+	decl *jsonschema.DeclType,
+) (*runtime.Type, error) {
+	schemaNode := decl.JSONSchema
+	disc, err := discriminatorConstAt(schemaNode)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get JSON schema for repository %s: %w", typ, err)
+		return nil, fmt.Errorf("read discriminator: %w", err)
 	}
-	reflector := invopop.Reflector{
-		DoNotReference: true,
-		Anonymous:      true,
-		IgnoredTypes:   []any{&runtime.Raw{}},
+
+	rt, err := runtime.TypeFromString(disc)
+	if err != nil {
+		return nil, fmt.Errorf("invalid runtime type %q: %w", disc, err)
 	}
-	transformationSpecJSONSchema := reflector.Reflect(&transformations.DownloadComponentTransformation{})
-	transformationSpecJSONSchema.Properties.Set("repository", descriptorSchemas.RepositorySchema)
-	return transformationSpecJSONSchema, descriptorSchemas.DescriptorSchema, nil
+
+	return &rt, nil
 }
 
-type EnvBuilder struct {
-	declTypes  []*jsonschema.DeclType
-	envOptions []cel.EnvOption
-}
+func runtimeTypesFromTransformation(
+	env *cel.Env,
+	transformation Transformation,
+	v1alpha1 v1alpha1.Transformation,
+	declTypeProvider *jsonschema.DeclTypeProvider,
+) (map[string]runtime.Type, error) {
+	var (
+		typCandidate    *runtime.Type
+		foundDependency bool
+	)
 
-func NewEnvBuilder(staticEnvironment map[string]interface{}) (*EnvBuilder, error) {
-	schema, err := jsonschema.InferFromGoValue(staticEnvironment)
-	if err != nil {
-		return nil, err
+	typedFields := v1alpha1.NestedTypedFields()
+
+	for _, typedField := range typedFields {
+		typedSegs, err := fieldpath.Parse(typedField)
+		if err != nil {
+			return nil, fmt.Errorf("parse typed field %q: %w", typedField, err)
+		}
+
+		var (
+			best     *cel.Type
+			bestRank = matchNone
+		)
+
+		for i := range transformation.fieldDescriptors {
+			fd := &transformation.fieldDescriptors[i]
+			descSegs, err := fieldpath.Parse(fd.Path)
+			if err != nil {
+				return nil, fmt.Errorf("parse descriptor %q: %w", fd.Path, err)
+			}
+
+			if mr := matchSegments(typedSegs, descSegs); mr != matchNone && mr > bestRank {
+				if mr == matchChild {
+					childExpression, err := fieldpath.Parse(fd.Expressions[0])
+					if err != nil {
+						return nil, fmt.Errorf("parse child expression %q: %w", fd.Expressions[0], err)
+					}
+					parentExpression := fieldpath.Build(childExpression[:len(childExpression)-1])
+					ast, issues := env.Compile(parentExpression)
+					if issues.Err() != nil {
+						return nil, issues.Err()
+					}
+					best = ast.OutputType()
+				} else {
+					best = fd.ExpectedType
+				}
+				bestRank = mr
+			}
+		}
+
+		if best == nil {
+			continue
+		}
+		foundDependency = true
+
+		declTyp, ok := declTypeProvider.FindDeclType(best.TypeName())
+		if !ok {
+			return nil, fmt.Errorf("no declType for %q", best.TypeName())
+		}
+
+		rt, err := ResolveRuntimeType(declTyp)
+		if err != nil {
+			return nil, fmt.Errorf("resolve runtime type for %q: %w", typedField, err)
+		}
+		if rt == nil {
+			continue
+		}
+
+		typCandidate = rt
+		break // first valid dependency is enough
 	}
-	envDeclType := jsonschema.DeclTypeFromInvopop(schema)
-	envDeclType = envDeclType.MaybeAssignTypeName("__type_environment")
-	staticEnvVal := types.DefaultTypeAdapter.NativeToValue(staticEnvironment)
-	staticEnvConstant := cel.Constant("environment", envDeclType.CelType(), staticEnvVal)
 
-	return &EnvBuilder{
-		declTypes:  []*jsonschema.DeclType{envDeclType},
-		envOptions: []cel.EnvOption{staticEnvConstant},
+	// No dependency ⇒ use static type from transformation itself.
+	if !foundDependency {
+		// TODO use static type by going into the unstructured transformation and reading the field descriptor
+	}
+
+	if typCandidate == nil {
+		return nil, fmt.Errorf("failed to resolve runtime type for transformation %q", transformation.ID)
+	}
+
+	// TODO in theory we need to pass out N types for n nested field types
+	return map[string]runtime.Type{
+		typedFields[0]: *typCandidate,
 	}, nil
-}
-
-func (envBuilder *EnvBuilder) RegisterDeclTypes(declTypes ...*jsonschema.DeclType) *EnvBuilder {
-	envBuilder.declTypes = append(envBuilder.declTypes, declTypes...)
-	return envBuilder
-}
-
-func (envBuilder *EnvBuilder) RegisterEnvOption(envOptions ...cel.EnvOption) *EnvBuilder {
-	envBuilder.envOptions = append(envBuilder.envOptions, envOptions...)
-	return envBuilder
-}
-
-func (envBuilder *EnvBuilder) CurrentEnv() (*cel.Env, *jsonschema.DeclTypeProvider, error) {
-	baseEnv, err := cel.NewEnv()
-	if err != nil {
-		return nil, nil, err
-	}
-	provider := jsonschema.NewDeclTypeProvider(envBuilder.declTypes...)
-	opts, err := provider.EnvOptions(baseEnv.CELTypeProvider())
-	if err != nil {
-		return nil, nil, err
-	}
-	newEnv, err := baseEnv.Extend(append(opts, envBuilder.envOptions...)...)
-	if err != nil {
-		return nil, nil, err
-	}
-	return newEnv, provider, nil
 }
