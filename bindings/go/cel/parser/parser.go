@@ -181,6 +181,10 @@ func parseObject(field map[string]interface{}, schema *invopop.Schema, path stri
 		}
 		expressionsFields = append(expressionsFields, fieldExpressions...)
 	}
+
+	slices.SortFunc(expressionsFields, func(a, b FieldDescriptor) int {
+		return strings.Compare(a.Path, b.Path)
+	})
 	return expressionsFields, nil
 }
 

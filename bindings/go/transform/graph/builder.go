@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/cel-go/cel"
@@ -10,12 +11,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/parser"
+	"ocm.software/open-component-model/bindings/go/cel/resolver"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations"
 )
 
 const (
@@ -27,7 +28,7 @@ type Transformation struct {
 	fieldDescriptors []parser.FieldDescriptor
 	expressions      []ast.ExpressionInspection
 	order            int
-	prototype        runtime.Typed
+	prototype        v1alpha1.Transformation
 
 	declType *jsonschema.DeclType
 }
@@ -94,8 +95,10 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 
 	runtimeEvaluationProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
 		Processor: &RuntimeEvaluationProcessor{
-			builder:       builder,
-			pluginManager: b.pm,
+			builder:                  builder,
+			pluginManager:            b.pm,
+			evaluatedExpressionCache: make(map[string]any),
+			evaluatedTransformations: make(map[string]any),
 		},
 		Concurrency: 1,
 	})
@@ -109,9 +112,11 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 }
 
 type RuntimeEvaluationProcessor struct {
-	pluginManager   *manager.PluginManager
-	builder         *EnvBuilder
-	transformations map[string]Transformation
+	pluginManager            *manager.PluginManager
+	builder                  *EnvBuilder
+	transformations          map[string]Transformation
+	evaluatedExpressionCache map[string]any
+	evaluatedTransformations map[string]any
 }
 
 func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
@@ -119,32 +124,45 @@ func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transform
 	if err != nil {
 		return err
 	}
-	switch transformation.prototype.(type) {
-	case *transformations.DownloadComponentTransformation:
-		for _, fieldDescriptor := range transformation.fieldDescriptors {
-			for _, expression := range fieldDescriptor.Expressions {
-				program, err := env.Program(expression.AST)
-				if err != nil {
-					return fmt.Errorf(": %w", err)
-				}
-				result, _, err := program.Eval(map[string]interface{}{})
-				if err != nil {
-					return fmt.Errorf("failed to evaluate expression %q: %w", expression.String, err)
-				}
-				_ = result
-				// 1) use result with resolver to replace cel expressions with values
-				// 2) we now have the complete spec. call transformer with that spec and write the
-				//    call result into output
-				// 3) write whole variable (spec + output) into a variable and add it under the
-				//    transformation ID to the expression context
-
+	for _, fieldDescriptor := range transformation.fieldDescriptors {
+		for _, expression := range fieldDescriptor.Expressions {
+			if _, found := b.evaluatedExpressionCache[expression.String]; found {
+				continue
 			}
+			program, err := env.Program(expression.AST)
+			if err != nil {
+				return fmt.Errorf(": %w", err)
+			}
+			result, _, err := program.Eval(b.evaluatedTransformations)
+			if err != nil {
+				return fmt.Errorf("failed to evaluate expression %q: %w", expression.String, err)
+			}
+			val, err := environment.GoNativeType(result)
+			if err != nil {
+				return fmt.Errorf("failed to convert result of expression %q to go native type: %w", expression.String, err)
+			}
+			b.evaluatedExpressionCache[expression.String] = val
 		}
-		return nil
-	default:
-		return nil
+	}
+	res := resolver.NewResolver(transformation.Spec.Data, b.evaluatedExpressionCache)
+	summary := res.Resolve(transformation.fieldDescriptors)
+	if len(summary.Errors) > 0 {
+		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
 	}
 
+	if err := transformation.prototype.FromGeneric(&transformation.GenericTransformation); err != nil {
+		return err
+	}
+	output, err := transformation.prototype.Transform(ctx, b.pluginManager, nil)
+	if err != nil {
+		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
+	}
+	evaluatedTransformation := map[string]any{
+		"spec":   transformation.Spec.Data,
+		"output": output,
+	}
+	b.evaluatedTransformations[transformation.ID] = evaluatedTransformation
+	return nil
 }
 
 type StaticPluginAnalysisProcessor struct {
@@ -179,13 +197,12 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	if err != nil {
 		return fmt.Errorf("failed to create object for transformation type %s: %w", typ, err)
 	}
-	transformation.prototype = typedTransformation
-
 	v1alpha1Transformation, ok := typedTransformation.(v1alpha1.Transformation)
 	if !ok {
 		return fmt.Errorf("transformation type %s is not a valid spec transformation", typ)
 	}
 	v1alpha1Transformation.GetTransformationMeta().ID = transformation.ID
+	transformation.prototype = v1alpha1Transformation
 
 	runtimeTypes, err := runtimeTypesFromTransformation(env, transformation, v1alpha1Transformation, provider)
 	if err != nil {

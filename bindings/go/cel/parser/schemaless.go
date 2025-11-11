@@ -16,6 +16,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/cel-go/cel"
@@ -42,6 +43,9 @@ func parseSchemalessResource(resource interface{}, path string) ([]FieldDescript
 			}
 			expressionsFields = append(expressionsFields, fieldExpressions...)
 		}
+		slices.SortFunc(expressionsFields, func(a, b FieldDescriptor) int {
+			return strings.Compare(a.Path, b.Path)
+		})
 	case []interface{}:
 		for i, item := range field {
 			itemPath := fmt.Sprintf("%s[%d]", path, i)

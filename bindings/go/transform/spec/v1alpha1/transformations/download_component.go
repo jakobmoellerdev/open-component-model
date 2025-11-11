@@ -1,13 +1,18 @@
 package transformations
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 
 	invopop "github.com/invopop/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	v2runtime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
@@ -34,6 +39,75 @@ type DownloadComponentTransformationSpec struct {
 
 func (*DownloadComponentTransformation) NestedTypedFields() []string {
 	return []string{"repository"}
+}
+
+// 1) Get this plugin to run with a ctf
+// 2) Implement upload transformation for an e2e scenario
+// 3) Decouple transformation from plugin manager with shared contracts
+
+// Transform downloads the specified component version descriptor from the given repository.
+// We might want to investigate returning cel.Activation here to allow for more flexibility
+func (d *DownloadComponentTransformation) Transform(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.GraphResolver) (map[string]any, error) {
+	registry := pm.ComponentVersionRepositoryRegistry
+	consumerId, err := registry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, d.Spec.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting component version repository credential consumer identity: %v", err)
+	}
+	var creds map[string]string
+	if credentialProvider != nil {
+		creds, err = credentialProvider.Resolve(ctx, consumerId)
+		if err != nil {
+			return nil, fmt.Errorf("failed resolving credentials: %v", err)
+		}
+	}
+	repo, err := registry.GetComponentVersionRepository(ctx, d.Spec.Repository, creds)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting component version repository: %v", err)
+	}
+	// TODO(fabianburth): throw an error if one attempts to marshal a runtime
+	//  descriptor
+	desc, err := repo.GetComponentVersion(ctx, d.Spec.Component, d.Spec.Version)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting component version %s:%s: %v", d.Spec.Component, d.Spec.Version, err)
+	}
+
+	v2desc, err := v2runtime.ConvertToV2(runtime.NewScheme(), desc)
+	if err != nil {
+		return nil, fmt.Errorf("failed converting component version to v2: %v", err)
+	}
+	var m map[string]any
+	data, err := json.Marshal(v2desc)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling component version descriptor: %v", err)
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling component version descriptor into map: %v", err)
+	}
+	return m, nil
+}
+
+func (d *DownloadComponentTransformation) FromGeneric(generic *v1alpha1.GenericTransformation) error {
+	data, err := json.Marshal(generic.Spec.Data["repository"])
+	if err != nil {
+		return fmt.Errorf("marshal spec: %w", err)
+	}
+	var raw runtime.Raw
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&raw); err != nil {
+		return fmt.Errorf("failed to decode strict into runtime raw: %w", err)
+	}
+	transformation := &DownloadComponentTransformation{
+		TransformationMeta: generic.TransformationMeta,
+		Spec: DownloadComponentTransformationSpec{
+			Repository: &raw,
+			Component:  generic.Spec.Data["component"].(string),
+			Version:    generic.Spec.Data["version"].(string),
+		},
+	}
+	d.TransformationMeta = transformation.TransformationMeta
+	d.Spec = transformation.Spec
+	return nil
 }
 
 func (t *DownloadComponentTransformation) NewDeclType(pm *manager.PluginManager, nestedFieldTypes map[string]runtime.Type) (*jsonschema.DeclType, error) {

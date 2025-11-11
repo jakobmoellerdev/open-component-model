@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
@@ -27,11 +28,18 @@ func newTestBuilder(t *testing.T) *Builder {
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
 	repoScheme := runtime.NewScheme()
 	repository.MustAddToScheme(repoScheme)
+	// TODO(fabianburth): registry can fetch all types from provider
 	require.NoError(t, componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		repoScheme,
 		pm.ComponentVersionRepositoryRegistry,
 		repoProvider,
 		&ociv1.Repository{},
+	))
+	require.NoError(t, componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+		repoScheme,
+		pm.ComponentVersionRepositoryRegistry,
+		repoProvider,
+		&ctfv1.Repository{},
 	))
 
 	return &Builder{
@@ -231,6 +239,40 @@ transformations:
       nonExistentField: 1234
     component: "A"
     version: "1.0.0"
+`
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
+	graph, err := builder.NewTransferGraph(tgd)
+	r.NoError(err)
+	r.NotNil(graph)
+}
+
+func TestGraphBuilder_EvaluateGraph(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	yamlSrc := `
+environment:
+  repository:
+    type: ctf
+    path: "/Users/I544542/SAPDevelop/Repositories/sap/github.com/open-component-model/open-component-model/bindings/go/transform/graph/test/transport-archive"
+transformations:
+- id: download1
+  type: ocm.software.download.component
+  spec:
+    repository:
+      type: ${environment.repository.type}
+      path: ${environment.repository.path}
+    component: "github.com/acme.org/helloworld"
+    version: "1.0.0"
+- id: download2
+  type: ocm.software.download.component
+  spec:
+    repository:
+      type: ${download1.spec.repository.type}
+      path: ${download1.spec.repository.path}
+    component: ${download1.output.component.name}
+    version: ${download1.output.component.version}
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
