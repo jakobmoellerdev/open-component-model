@@ -50,6 +50,9 @@ func (s *Schema) Properties() map[string]*Schema {
 	}
 	res := make(map[string]*Schema, s.JSONSchema.Properties.Len())
 	for pair := s.JSONSchema.Properties.Oldest(); pair != nil; pair = pair.Next() {
+		if pair == nil || pair.Value == nil {
+			continue
+		}
 		s := *pair.Value
 		res[pair.Key] = &Schema{JSONSchema: &s}
 	}

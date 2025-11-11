@@ -23,6 +23,10 @@ func newTestBuilder(t *testing.T) *Builder {
 		&transformations.DownloadComponentTransformation{},
 		runtime.NewUnversionedType(transformations.DownloadComponentTransformationType),
 	))
+	require.NoError(t, transformerScheme.RegisterWithAlias(
+		&transformations.UploadComponentTransformation{},
+		runtime.NewUnversionedType(transformations.UploadComponentTransformationType),
+	))
 
 	pm := manager.NewPluginManager(t.Context())
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
@@ -256,6 +260,7 @@ environment:
   repository:
     type: ctf
     path: "/Users/I544542/SAPDevelop/Repositories/sap/github.com/open-component-model/open-component-model/bindings/go/transform/graph/test/transport-archive"
+    accessMode: "readwrite"
 transformations:
 - id: download1
   type: ocm.software.download.component
@@ -263,16 +268,17 @@ transformations:
     repository:
       type: ${environment.repository.type}
       path: ${environment.repository.path}
+      accessMode: ${environment.repository.accessMode}
     component: "github.com/acme.org/helloworld"
     version: "1.0.0"
 - id: download2
-  type: ocm.software.download.component
+  type: ocm.software.upload.component
   spec:
     repository:
       type: ${download1.spec.repository.type}
       path: ${download1.spec.repository.path}
-    component: ${download1.output.component.name}
-    version: ${download1.output.component.version}
+      accessMode: ${environment.repository.accessMode}
+    descriptor: "${download1.output}"
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))

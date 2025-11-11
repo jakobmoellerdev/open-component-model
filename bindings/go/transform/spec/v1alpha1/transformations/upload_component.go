@@ -9,35 +9,38 @@ import (
 	invopop "github.com/invopop/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	v2runtime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
-const DownloadComponentTransformationType = "ocm.software.download.component"
+const UploadComponentTransformationType = "ocm.software.upload.component"
 
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
-type DownloadComponentTransformation struct {
+type UploadComponentTransformation struct {
 	meta.TransformationMeta `json:",inline"`
-	Spec                    DownloadComponentTransformationSpec `json:"spec"`
+	Spec                    UploadComponentTransformationSpec `json:"spec"`
 }
 
-func (t *DownloadComponentTransformation) GetTransformationMeta() *meta.TransformationMeta {
+func (t *UploadComponentTransformation) GetTransformationMeta() *meta.TransformationMeta {
 	return &t.TransformationMeta
 }
 
-// +k8s:deepcopy-gen=true
-type DownloadComponentTransformationSpec struct {
-	Repository *runtime.Raw `json:"repository"`
-	Component  string       `json:"component"`
-	Version    string       `json:"version"`
+type UploadComponentTransformationSpec struct {
+	Repository *runtime.Raw   `json:"repository"`
+	Descriptor *v2.Descriptor `json:"descriptor"`
 }
 
-func (*DownloadComponentTransformation) NestedTypedFields() []string {
+func (in *UploadComponentTransformationSpec) DeepCopyInto(out *UploadComponentTransformationSpec) {
+	*out = *in
+}
+
+func (*UploadComponentTransformation) NestedTypedFields() []string {
 	return []string{"repository"}
 }
 
@@ -47,7 +50,7 @@ func (*DownloadComponentTransformation) NestedTypedFields() []string {
 
 // Transform downloads the specified component version descriptor from the given repository.
 // We might want to investigate returning cel.Activation here to allow for more flexibility
-func (d *DownloadComponentTransformation) Transform(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.GraphResolver) (map[string]any, error) {
+func (d *UploadComponentTransformation) Transform(ctx context.Context, pm *manager.PluginManager, credentialProvider credentials.GraphResolver) (map[string]any, error) {
 	registry := pm.ComponentVersionRepositoryRegistry
 	consumerId, err := registry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, d.Spec.Repository)
 	if err != nil {
@@ -64,29 +67,19 @@ func (d *DownloadComponentTransformation) Transform(ctx context.Context, pm *man
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %v", err)
 	}
+	desc, err := descruntime.ConvertFromV2(d.Spec.Descriptor)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert descriptor to runtime format: %v", err)
+	}
 	// TODO(fabianburth): throw an error if one attempts to marshal a runtime
 	//  descriptor
-	desc, err := repo.GetComponentVersion(ctx, d.Spec.Component, d.Spec.Version)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting component version %s:%s: %v", d.Spec.Component, d.Spec.Version, err)
+	if err := repo.AddComponentVersion(ctx, desc); err != nil {
+		return nil, fmt.Errorf("failed to upload component version %s:%s to %v: %v", d.Spec.Descriptor.Component.Name, d.Spec.Descriptor.Component.Version, d.Spec.Repository, err)
 	}
-
-	v2desc, err := v2runtime.ConvertToV2(runtime.NewScheme(), desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed converting component version to v2: %v", err)
-	}
-	var m map[string]any
-	data, err := json.Marshal(v2desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed marshalling component version descriptor: %v", err)
-	}
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling component version descriptor into map: %v", err)
-	}
-	return m, nil
+	return nil, nil
 }
 
-func (d *DownloadComponentTransformation) FromGeneric(generic *v1alpha1.GenericTransformation) error {
+func (d *UploadComponentTransformation) FromGeneric(generic *v1alpha1.GenericTransformation) error {
 	data, err := json.Marshal(generic.Spec.Data["repository"])
 	if err != nil {
 		return fmt.Errorf("marshal spec: %w", err)
@@ -97,12 +90,22 @@ func (d *DownloadComponentTransformation) FromGeneric(generic *v1alpha1.GenericT
 	if err := decoder.Decode(&raw); err != nil {
 		return fmt.Errorf("failed to decode strict into runtime raw: %w", err)
 	}
-	transformation := &DownloadComponentTransformation{
+
+	data, err = json.Marshal(generic.Spec.Data["descriptor"])
+	if err != nil {
+		return fmt.Errorf("marshal spec: %w", err)
+	}
+	var descriptor v2.Descriptor
+	decoder = json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&descriptor); err != nil {
+		return fmt.Errorf("failed to decode strict into v2 descriptor: %w", err)
+	}
+	transformation := &UploadComponentTransformation{
 		TransformationMeta: generic.TransformationMeta,
-		Spec: DownloadComponentTransformationSpec{
+		Spec: UploadComponentTransformationSpec{
 			Repository: &raw,
-			Component:  generic.Spec.Data["component"].(string),
-			Version:    generic.Spec.Data["version"].(string),
+			Descriptor: &descriptor,
 		},
 	}
 	d.TransformationMeta = transformation.TransformationMeta
@@ -110,13 +113,13 @@ func (d *DownloadComponentTransformation) FromGeneric(generic *v1alpha1.GenericT
 	return nil
 }
 
-func (t *DownloadComponentTransformation) NewDeclType(pm *manager.PluginManager, nestedFieldTypes map[string]runtime.Type) (*jsonschema.DeclType, error) {
+func (t *UploadComponentTransformation) NewDeclType(pm *manager.PluginManager, nestedFieldTypes map[string]runtime.Type) (*jsonschema.DeclType, error) {
 	repoFieldType, ok := nestedFieldTypes["repository"]
 	if !ok {
 		return nil, fmt.Errorf("missing nested field type for spec.repository")
 	}
 
-	specSchema, outSchema, err := downloadComponentTransformationJSONSchema(pm, repoFieldType)
+	specSchema, outSchema, err := uploadComponentTransformationJSONSchema(pm, repoFieldType)
 	if err != nil {
 		return nil, fmt.Errorf("get JSON schema for %s: %w", repoFieldType.String(), err)
 	}
@@ -129,12 +132,16 @@ func (t *DownloadComponentTransformation) NewDeclType(pm *manager.PluginManager,
 	s.Properties.Set("output", outSchema)
 
 	decl := jsonschema.DeclTypeFromInvopop(s)
-	decl.Fields["output"].Type = decl.Fields["output"].Type.MaybeAssignTypeName("iloveinvopop")
+	specfield := decl.Fields["spec"]
+	descriptorField := specfield.Type.Fields["descriptor"]
+	descriptorField.Type = descriptorField.Type.MaybeAssignTypeName("iloveinvopop")
+	specfield.Type.Fields["descriptor"] = descriptorField
+	decl.Fields["spec"] = specfield
 	decl = decl.MaybeAssignTypeName("__type_" + t.ID)
 	return decl, nil
 }
 
-func downloadComponentTransformationJSONSchema(
+func uploadComponentTransformationJSONSchema(
 	pluginManager *manager.PluginManager,
 	typ runtime.Type,
 ) (*invopop.Schema, *invopop.Schema, error) {
@@ -148,7 +155,8 @@ func downloadComponentTransformationJSONSchema(
 		Anonymous:      true,
 		IgnoredTypes:   []any{&runtime.Raw{}},
 	}
-	transformationSpecJSONSchema := reflector.Reflect(&DownloadComponentTransformationSpec{})
+	transformationSpecJSONSchema := reflector.Reflect(&UploadComponentTransformationSpec{})
 	transformationSpecJSONSchema.Properties.Set("repository", descriptorSchemas.RepositorySchema)
-	return transformationSpecJSONSchema, descriptorSchemas.DescriptorSchema, nil
+	transformationSpecJSONSchema.Properties.Set("descriptor", descriptorSchemas.DescriptorSchema)
+	return transformationSpecJSONSchema, nil, nil
 }

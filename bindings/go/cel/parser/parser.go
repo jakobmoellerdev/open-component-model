@@ -79,6 +79,8 @@ func getCelType(schema *invopop.Schema) *cel.Type {
 		return cel.DynType
 	}
 
+	declType = declType.MaybeAssignTypeName(string(schema.ID))
+
 	return declType.CelType()
 }
 
@@ -91,6 +93,9 @@ func getExpectedTypes(schema *invopop.Schema) ([]string, error) {
 	}
 
 	// Handle direct type definitions
+	//if schema.ID != "" {
+	//	return []string{string(schema.ID)}, nil
+	//}
 	if schema.Type != "" {
 		return []string{schema.Type}, nil
 	}

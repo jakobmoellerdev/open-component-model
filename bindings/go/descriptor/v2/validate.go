@@ -53,6 +53,7 @@ func compile(data []byte) (*Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate invopop schema: %w", err)
 	}
+	invopopSchema.ID = "iloveinvopop"
 	return &Schema{
 		Schema:  *sch,
 		Invopop: *invopopSchema,

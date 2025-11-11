@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ocm.software/schemas/descriptor-v2.json",
   "description": "Open Component Model v2 schema",
   "$defs": {
     "meta": {
