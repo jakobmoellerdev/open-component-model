@@ -47,8 +47,8 @@ func newTestBuilder(t *testing.T) *Builder {
 	))
 
 	return &Builder{
-		transformerScheme: transformerScheme,
-		pm:                pm,
+		transformerScheme:                  transformerScheme,
+		componentVersionRepositoryProvider: repoProvider,
 	}
 }
 
@@ -259,7 +259,7 @@ func TestGraphBuilder_EvaluateGraph(t *testing.T) {
 environment:
   repository:
     type: ctf
-    path: "/Users/I544542/SAPDevelop/Repositories/sap/github.com/open-component-model/open-component-model/bindings/go/transform/graph/test/transport-archive"
+    path: "/home/jakob/Projects/open-component-model/bindings/go/transform/graph/test/transport-archive"
     accessMode: "readwrite"
 transformations:
 - id: download1

@@ -101,7 +101,7 @@ func getExpectedTypes(schema *invopop.Schema) ([]string, error) {
 	}
 
 	// Handle additional properties
-	if schema.AdditionalProperties == invopop.TrueSchema {
+	if jsonschema.IsBoolSchema(schema.AdditionalProperties, true) {
 		// NOTE(a-hilaly): I don't like the type "any", we might want to change this to "object"
 		// in the future; just haven't really thought about it yet.
 		// Basically "any" means that the field can be of any type.
@@ -169,7 +169,7 @@ func validateSchema(schema *invopop.Schema, path string) error {
 }
 
 func parseObject(field map[string]interface{}, schema *invopop.Schema, path string, expectedTypes []string) ([]FieldDescriptor, error) {
-	if !slices.Contains(expectedTypes, "object") && (schema.AdditionalProperties == invopop.FalseSchema) {
+	if !slices.Contains(expectedTypes, "object") && (jsonschema.IsBoolSchema(schema.AdditionalProperties, false)) {
 		return nil, fmt.Errorf("expected %s type for path %s, got object", strings.Join(expectedTypes, " or "), path)
 	}
 
@@ -314,7 +314,7 @@ func getFieldSchema(schema *invopop.Schema, field string) (*invopop.Schema, erro
 		}
 	}
 
-	if schema.AdditionalProperties == invopop.TrueSchema {
+	if jsonschema.IsBoolSchema(schema.AdditionalProperties, true) {
 		return schema.AdditionalProperties, nil
 	}
 

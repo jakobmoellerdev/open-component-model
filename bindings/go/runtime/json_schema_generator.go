@@ -114,7 +114,7 @@ func GenerateJSONSchemaWithScheme(scheme *Scheme, obj any) (*jsonschema.Schema, 
 	reflector.Anonymous = true
 	reflector.DoNotReference = true
 
-	return reflector.ReflectFromType(reflect.TypeOf(obj)), retErr
+	return reflector.Reflect(obj), retErr
 }
 
 func getTypeEnum(scheme *Scheme, obj Typed) (*jsonschema.Schema, error) {

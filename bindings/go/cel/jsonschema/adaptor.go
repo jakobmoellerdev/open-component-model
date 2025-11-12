@@ -50,20 +50,18 @@ func (s *Schema) Properties() map[string]*Schema {
 	}
 	res := make(map[string]*Schema, s.JSONSchema.Properties.Len())
 	for pair := s.JSONSchema.Properties.Oldest(); pair != nil; pair = pair.Next() {
-		if pair == nil || pair.Value == nil {
-			continue
+		if pair.Value != nil {
+			res[pair.Key] = &Schema{JSONSchema: pair.Value}
 		}
-		s := *pair.Value
-		res[pair.Key] = &Schema{JSONSchema: &s}
 	}
 	return res
 }
 
 func (s *Schema) AdditionalProperties() *Schema {
-	if s.JSONSchema.AdditionalProperties == jsonschema.FalseSchema {
+	if s.JSONSchema.AdditionalProperties == nil {
 		return nil
 	}
-	if s.JSONSchema.AdditionalProperties == nil {
+	if IsBoolSchema(s.JSONSchema.AdditionalProperties, false) {
 		return nil
 	}
 	return &Schema{JSONSchema: s.JSONSchema.AdditionalProperties}

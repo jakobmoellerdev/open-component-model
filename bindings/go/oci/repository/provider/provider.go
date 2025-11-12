@@ -72,6 +72,18 @@ type CachingComponentVersionRepositoryProvider struct {
 	tempDir string
 }
 
+func (b *CachingComponentVersionRepositoryProvider) GetJSONSchema(ctx context.Context, repositorySpecificationType runtime.Type) ([]byte, error) {
+	prototype, err := b.scheme.NewObject(repositorySpecificationType)
+	if err != nil {
+		return nil, err
+	}
+	reflected, err := runtime.GenerateJSONSchemaWithScheme(b.scheme, prototype)
+	if err != nil {
+		return nil, err
+	}
+	return reflected.MarshalJSON()
+}
+
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
 
 // NewComponentVersionRepositoryProvider creates a new instance of CachingComponentVersionRepositoryProvider

@@ -14,9 +14,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/resolver"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations"
 )
 
 const (
@@ -34,9 +35,8 @@ type Transformation struct {
 }
 
 type Builder struct {
-	transformerScheme *runtime.Scheme
-	// TODO reduce to interface
-	pm *manager.PluginManager
+	transformerScheme                  *runtime.Scheme
+	componentVersionRepositoryProvider repository.ComponentVersionRepositoryProvider
 }
 
 type Graph struct {
@@ -74,10 +74,10 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	synced := syncdag.ToSyncedGraph(graph)
 
 	pluginProcessor := &StaticPluginAnalysisProcessor{
-		builder:                 builder,
-		transformerScheme:       b.transformerScheme,
-		pluginManager:           b.pm,
-		analyzedTransformations: make(map[string]Transformation),
+		builder:                            builder,
+		transformerScheme:                  b.transformerScheme,
+		componentVersionRepositoryProvider: b.componentVersionRepositoryProvider,
+		analyzedTransformations:            make(map[string]Transformation),
 	}
 
 	staticAnalysisProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
@@ -96,7 +96,6 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	runtimeEvaluationProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
 		Processor: &RuntimeEvaluationProcessor{
 			builder:                  builder,
-			pluginManager:            b.pm,
 			evaluatedExpressionCache: make(map[string]any),
 			evaluatedTransformations: make(map[string]any),
 		},
@@ -112,7 +111,6 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 }
 
 type RuntimeEvaluationProcessor struct {
-	pluginManager            *manager.PluginManager
 	builder                  *EnvBuilder
 	transformations          map[string]Transformation
 	evaluatedExpressionCache map[string]any
@@ -153,7 +151,7 @@ func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transform
 	if err := transformation.prototype.FromGeneric(&transformation.GenericTransformation); err != nil {
 		return err
 	}
-	output, err := transformation.prototype.Transform(ctx, b.pluginManager, nil)
+	output, err := transformation.prototype.Transform(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
@@ -166,10 +164,10 @@ func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transform
 }
 
 type StaticPluginAnalysisProcessor struct {
-	transformerScheme       *runtime.Scheme
-	pluginManager           *manager.PluginManager
-	builder                 *EnvBuilder
-	analyzedTransformations map[string]Transformation
+	transformerScheme                  *runtime.Scheme
+	componentVersionRepositoryProvider repository.ComponentVersionRepositoryProvider
+	builder                            *EnvBuilder
+	analyzedTransformations            map[string]Transformation
 }
 
 func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
@@ -204,13 +202,20 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 	v1alpha1Transformation.GetTransformationMeta().ID = transformation.ID
 	transformation.prototype = v1alpha1Transformation
 
+	switch typedPrototype := transformation.prototype.(type) {
+	case *transformations.DownloadComponentTransformation:
+		typedPrototype.Provider = b.componentVersionRepositoryProvider
+	case *transformations.UploadComponentTransformation:
+		typedPrototype.Provider = b.componentVersionRepositoryProvider
+	}
+
 	runtimeTypes, err := runtimeTypesFromTransformation(env, transformation, v1alpha1Transformation, provider)
 	if err != nil {
 		return err
 	}
 
 	// Shared schema construction + registration.
-	declType, err := v1alpha1Transformation.NewDeclType(b.pluginManager, runtimeTypes)
+	declType, err := v1alpha1Transformation.NewDeclType(runtimeTypes)
 	if err != nil {
 		return err
 	}
