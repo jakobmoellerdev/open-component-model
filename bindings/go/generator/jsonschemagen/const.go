@@ -4,6 +4,7 @@ import (
 	"go/constant"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
@@ -14,7 +15,7 @@ import (
 //   - Marker-based enums always win structurally
 //   - Const-based enums provide descriptions + deprecated flags
 //   - If no enum exists yet, const enums create it
-func ApplyConstEnum(s *JSONSchemaDraft202012, enums []*universe.Const) {
+func ApplyConstEnum(s *jsonschema.Schema, enums []*universe.Const) {
 	if s == nil || len(enums) == 0 {
 		return
 	}
@@ -60,15 +61,15 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, enums []*universe.Const) {
 
 	// CASE 1: no enum yet → create oneOf from const enums
 	if len(s.OneOf) == 0 && len(s.Enum) == 0 {
-		var oneOf []*JSONSchemaDraft202012
+		var oneOf []*jsonschema.Schema
 		for _, lit := range order {
 			m := meta[lit]
-			entry := &JSONSchemaDraft202012{
-				Const:       lit,
+			entry := &jsonschema.Schema{
+				Const:       &lit,
 				Description: m.desc,
 			}
 			if m.deprecated {
-				entry.Deprecated = Ptr(true)
+				entry.Deprecated = true
 			}
 			oneOf = append(oneOf, entry)
 		}
@@ -86,8 +87,8 @@ func ApplyConstEnum(s *JSONSchemaDraft202012, enums []*universe.Const) {
 			if entry.Description == "" && m.desc != "" {
 				entry.Description = m.desc
 			}
-			if m.deprecated && entry.Deprecated == nil {
-				entry.Deprecated = Ptr(true)
+			if m.deprecated {
+				entry.Deprecated = true
 			}
 		}
 	}

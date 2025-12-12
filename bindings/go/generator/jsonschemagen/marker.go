@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
@@ -125,7 +126,7 @@ func ExtractMarkers(cg *ast.CommentGroup, base string) map[string]string {
 	return out
 }
 
-func ApplyNumericMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
+func ApplyNumericMarkers(s *jsonschema.Schema, markers map[string]string) {
 	if s == nil || len(markers) == 0 {
 		return
 	}
@@ -176,7 +177,7 @@ func ApplyNumericMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 	}
 }
 
-func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
+func ApplyEnumMarkers(s *jsonschema.Schema, markers map[string]string) {
 	if s == nil || len(markers) == 0 {
 		return
 	}
@@ -231,20 +232,14 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 		}
 	}
 
-	var oneOf []*JSONSchemaDraft202012
+	var oneOf []*jsonschema.Schema
 	for _, v := range order {
 		constVal := inferConstValue(s.Type, v)
 
 		_, isDeprecated := depSet[v]
-		var deprecatedPtr *bool
-		if isDeprecated {
-			b := true
-			deprecatedPtr = &b // omit field when not deprecated
-		}
-
-		oneOf = append(oneOf, &JSONSchemaDraft202012{
-			Const:      constVal,
-			Deprecated: deprecatedPtr,
+		oneOf = append(oneOf, &jsonschema.Schema{
+			Const:      &constVal,
+			Deprecated: isDeprecated,
 		})
 	}
 
@@ -276,7 +271,7 @@ func SchemaFromUniverseType(ti *universe.TypeInfo) (string, bool) {
 	return schemaFrom, ok && schemaFrom != ""
 }
 
-func ApplyFileMarkers(base *JSONSchemaDraft202012, schema string, path string) {
+func ApplyFileMarkers(base *jsonschema.Schema, schema string, path string) {
 	basePath := filepath.Dir(path)
 	source, err := os.OpenInRoot(basePath, schema)
 	if err != nil {

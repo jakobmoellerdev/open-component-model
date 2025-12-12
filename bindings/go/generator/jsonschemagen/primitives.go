@@ -3,6 +3,8 @@ package jsonschemagen
 import (
 	"go/ast"
 	"math"
+
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 func newPrimitiveSchema(
@@ -10,7 +12,7 @@ func newPrimitiveSchema(
 	ts *ast.TypeSpec,
 	gd *ast.GenDecl,
 	field *ast.Field,
-) *JSONSchemaDraft202012 {
+) *jsonschema.Schema {
 	// baseline primitive (min/max/multipleOf/format/type)
 	s := primitiveBaseForIdent(id)
 	if s == nil {
@@ -28,12 +30,12 @@ func newPrimitiveSchema(
 	return s
 }
 
-func primitiveBaseForIdent(ident *ast.Ident) *JSONSchemaDraft202012 {
+func primitiveBaseForIdent(ident *ast.Ident) *jsonschema.Schema {
 	switch ident.Name {
 	case "string":
-		return &JSONSchemaDraft202012{Type: "string"}
+		return &jsonschema.Schema{Type: "string"}
 	case "bool":
-		return &JSONSchemaDraft202012{Type: "boolean"}
+		return &jsonschema.Schema{Type: "boolean"}
 	// signed ints
 	case "int":
 		return intWithRange(math.MinInt, math.MaxInt)
@@ -62,29 +64,29 @@ func primitiveBaseForIdent(ident *ast.Ident) *JSONSchemaDraft202012 {
 	case "float64":
 		return numberWithRange(math.MaxFloat64)
 	case "complex64", "complex128":
-		return &JSONSchemaDraft202012{Type: "string"}
+		return &jsonschema.Schema{Type: "string"}
 	default:
 		return nil
 	}
 }
 
-func numberWithRange(maximum float64) *JSONSchemaDraft202012 {
-	return &JSONSchemaDraft202012{
+func numberWithRange(maximum float64) *jsonschema.Schema {
+	return &jsonschema.Schema{
 		Type:    "number",
 		Maximum: Ptr(maximum),
 	}
 }
 
-func uintWithRange(maximum uint64) *JSONSchemaDraft202012 {
-	return &JSONSchemaDraft202012{
+func uintWithRange(maximum uint64) *jsonschema.Schema {
+	return &jsonschema.Schema{
 		Type:    "integer",
 		Minimum: Ptr(float64(0)),
 		Maximum: Ptr(float64(maximum)),
 	}
 }
 
-func intWithRange(minimum, maximum int64) *JSONSchemaDraft202012 {
-	return &JSONSchemaDraft202012{
+func intWithRange(minimum, maximum int64) *jsonschema.Schema {
+	return &jsonschema.Schema{
 		Type:    "integer",
 		Minimum: Ptr(float64(minimum)),
 		Maximum: Ptr(float64(maximum)),

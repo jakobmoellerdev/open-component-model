@@ -3,6 +3,7 @@ package jsonschemagen
 import (
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
@@ -15,10 +16,10 @@ func New(u *universe.Universe) *Generator {
 }
 
 // GenerateJSONSchemaDraft202012 builds a JSON JSONSchemaDraft202012 for a root type.
-func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSONSchemaDraft202012 {
+func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *jsonschema.Schema {
 	schema := g.buildRootSchema(root)
 
-	defs := map[string]*JSONSchemaDraft202012{}
+	defs := map[string]*jsonschema.Schema{}
 	protected := map[string]struct{}{}
 
 	for _, ti := range g.collectReachableQueue(root) {
@@ -53,8 +54,8 @@ func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSON
 }
 
 func (g *Generator) flattenExternalSchemas(
-	s *JSONSchemaDraft202012,
-	defs map[string]*JSONSchemaDraft202012,
+	s *jsonschema.Schema,
+	defs map[string]*jsonschema.Schema,
 	protected map[string]struct{},
 ) {
 	for _, p := range s.Properties {
@@ -70,7 +71,7 @@ func (g *Generator) flattenExternalSchemas(
 	defs[key] = &cp
 	protected[key] = struct{}{}
 
-	*s = JSONSchemaDraft202012{
+	*s = jsonschema.Schema{
 		Ref: "#/$defs/" + key,
 	}
 }
