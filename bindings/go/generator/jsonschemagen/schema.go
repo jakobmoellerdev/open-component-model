@@ -250,11 +250,14 @@ func (g *Generator) schemaForExprWithOptionalField(
 
 func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
 	// try to resolve named type → $ref
-	if ti, ok := g.U.ResolveIdentViaTypes(ctx, id); ok {
-		sch := &JSONSchemaDraft202012{
+	if ti, ok := g.U.ResolveExpr(
+		ctx.Pkg.TypesInfo,
+		ctx.Key.PkgPath,
+		id,
+	); ok {
+		return &JSONSchemaDraft202012{
 			Ref: "#/$defs/" + universe.Definition(ti.Key),
 		}
-		return sch
 	}
 
 	// primitive with field markers
@@ -269,7 +272,11 @@ func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeI
 	var base *JSONSchemaDraft202012
 
 	// Only use field resolution if the selector is the field type
-	if ti, ok := g.U.ResolveSelectorViaTypes(ctx.Pkg.TypesInfo, sel); ok {
+	if ti, ok := g.U.ResolveExpr(
+		ctx.Pkg.TypesInfo,
+		ctx.Key.PkgPath,
+		sel,
+	); ok {
 		base = &JSONSchemaDraft202012{}
 		if schema, ok := SchemaFromUniverseType(ti); ok {
 			ApplyFileMarkers(base, schema, ti.FilePath)
@@ -325,7 +332,11 @@ func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.T
 		// follow fields only if struct
 		if ti.Struct != nil {
 			for _, f := range ti.Struct.Fields.List {
-				if ft, ok := g.U.ResolveFieldType(ti, f); ok {
+				if ft, ok := g.U.ResolveExpr(
+					ti.Pkg.TypesInfo,
+					ti.Key.PkgPath,
+					f.Type,
+				); ok {
 					walk(ft)
 					continue
 				}
@@ -343,17 +354,13 @@ func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.T
 
 func (g *Generator) collectFromExpr(expr ast.Expr, ctx *universe.TypeInfo, walk func(*universe.TypeInfo)) {
 	switch t := expr.(type) {
-	case *ast.Ident:
-		if ti, ok := g.U.ResolveIdent(ctx.Key.PkgPath, t); ok {
-			walk(ti)
-		}
-	case *ast.SelectorExpr:
-		if ti, ok := g.U.ResolveSelector(ctx.Key.PkgPath, t); ok {
+	case *ast.Ident, *ast.SelectorExpr:
+		if ti, ok := g.U.ResolveExpr(
+			ctx.Pkg.TypesInfo,
+			ctx.Key.PkgPath,
+			t,
+		); ok {
 			if _, ok := SchemaFromUniverseType(ti); ok {
-				// schema from file discovered, that means
-				// all types below this type are not relevant
-				// for schema generation and should be skipped from
-				// the walking queue.
 				return
 			}
 			walk(ti)
