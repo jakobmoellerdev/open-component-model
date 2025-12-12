@@ -130,43 +130,44 @@ func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft20201
 func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft202012 {
 	desc, deprecated := extractStructDoc(ti.TypeSpec, ti.GenDecl)
 
+	var sch *JSONSchemaDraft202012
+
 	switch t := ti.Expr.(type) {
-	case *ast.Ident: // type Foo string
+	case *ast.Ident:
 		if prim := newPrimitiveSchema(t, ti.TypeSpec, ti.GenDecl, nil); prim != nil {
-			prim.Comment = GeneratedComment
-			prim.Schema = JSONSchemaDraft202012URL
-			prim.Description = desc
-			prim.ID = g.schemaID(ti)
-			prim.Title = ti.Key.TypeName
-			if deprecated {
-				prim.Deprecated = Ptr(true)
-			}
-			return prim
+			sch = prim
 		}
-	case *ast.ArrayType: // type Foo []Bar
-		return &JSONSchemaDraft202012{
-			Schema:  JSONSchemaDraft202012URL,
-			Comment: GeneratedComment,
-			ID:      g.schemaID(ti),
-			Title:   ti.Key.TypeName,
-			Type:    "array",
-			Items:   g.schemaForExprWithOptionalField(t.Elt, ti, nil),
+	case *ast.ArrayType:
+		sch = &JSONSchemaDraft202012{
+			Type:  "array",
+			Items: g.schemaForExprWithOptionalField(t.Elt, ti, nil),
 		}
-	case *ast.MapType: // type Foo map[string]Bar
-		return &JSONSchemaDraft202012{
-			Schema:  JSONSchemaDraft202012URL,
-			Comment: GeneratedComment,
-			ID:      g.schemaID(ti),
-			Title:   ti.Key.TypeName,
-			Type:    "object",
+	case *ast.MapType:
+		sch = &JSONSchemaDraft202012{
+			Type: "object",
 			AdditionalProperties: &SchemaOrBool{
 				Schema: g.schemaForExprWithOptionalField(t.Value, ti, nil),
 			},
 		}
 	}
 
-	// fallback
-	return anyObjectSchema()
+	if sch == nil {
+		sch = anyObjectSchema()
+	}
+
+	// common metadata
+	sch.Schema = JSONSchemaDraft202012URL
+	sch.Comment = GeneratedComment
+	sch.ID = g.schemaID(ti)
+	sch.Title = ti.Key.TypeName
+	sch.Description = desc
+	if deprecated {
+		sch.Deprecated = Ptr(true)
+	}
+
+	ApplyConstEnum(sch, ti.Consts)
+
+	return sch
 }
 
 func (g *Generator) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*JSONSchemaDraft202012 {
@@ -249,7 +250,7 @@ func (g *Generator) schemaForExprWithOptionalField(
 
 func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
 	// try to resolve named type → $ref
-	if ti, ok := g.U.ResolveIdent(ctx.FilePath, ctx.Key.PkgPath, id); ok {
+	if ti, ok := g.U.ResolveIdentViaTypes(ctx, id); ok {
 		sch := &JSONSchemaDraft202012{
 			Ref: "#/$defs/" + universe.Definition(ti.Key),
 		}
@@ -266,19 +267,22 @@ func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInf
 
 func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
 	var base *JSONSchemaDraft202012
-	if ti, ok := g.U.ResolveSelector(ctx.FilePath, sel); ok {
+
+	// Only use field resolution if the selector is the field type
+	if ti, ok := g.U.ResolveSelectorViaTypes(ctx.Pkg.TypesInfo, sel); ok {
 		base = &JSONSchemaDraft202012{}
 		if schema, ok := SchemaFromUniverseType(ti); ok {
-			// if the schema is based on the type, embed
-			// it directly as a nested reference instead of attempting
-			// to link it to the $defs section.
 			ApplyFileMarkers(base, schema, ti.FilePath)
 			return base
 		}
+		ApplyConstEnum(base, ti.Consts)
 		base.Ref = "#/$defs/" + universe.Definition(ti.Key)
-	} else {
+	}
+
+	if base == nil {
 		base = anyObjectSchema()
 	}
+
 	// type level markers
 	typeMarkers := ExtractMarkerMap(ctx.TypeSpec, ctx.GenDecl, BaseMarker)
 	ApplyEnumMarkers(base, typeMarkers)
@@ -288,6 +292,7 @@ func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeI
 	fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)
 	ApplyEnumMarkers(base, fieldMarkers)
 	ApplyNumericMarkers(base, fieldMarkers)
+
 	return base
 }
 
@@ -320,6 +325,10 @@ func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.T
 		// follow fields only if struct
 		if ti.Struct != nil {
 			for _, f := range ti.Struct.Fields.List {
+				if ft, ok := g.U.ResolveFieldType(ti, f); ok {
+					walk(ft)
+					continue
+				}
 				g.collectFromExpr(f.Type, ti, walk)
 			}
 		} else {
@@ -335,11 +344,11 @@ func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.T
 func (g *Generator) collectFromExpr(expr ast.Expr, ctx *universe.TypeInfo, walk func(*universe.TypeInfo)) {
 	switch t := expr.(type) {
 	case *ast.Ident:
-		if ti, ok := g.U.ResolveIdent(ctx.FilePath, ctx.Key.PkgPath, t); ok {
+		if ti, ok := g.U.ResolveIdent(ctx.Key.PkgPath, t); ok {
 			walk(ti)
 		}
 	case *ast.SelectorExpr:
-		if ti, ok := g.U.ResolveSelector(ctx.FilePath, t); ok {
+		if ti, ok := g.U.ResolveSelector(ctx.Key.PkgPath, t); ok {
 			if _, ok := SchemaFromUniverseType(ti); ok {
 				// schema from file discovered, that means
 				// all types below this type are not relevant

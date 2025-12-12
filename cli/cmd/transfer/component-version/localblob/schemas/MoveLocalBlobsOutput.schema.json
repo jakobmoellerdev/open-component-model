@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/cli/cmd/transfer/component-version/localblob/schemas/MoveLocalBlobsOutput.schema.json",
   "title": "MoveLocalBlobsOutput",
   "type": "object",
+  "description": "MoveLocalBlobsOutput is the output specification of MoveLocalBlobs.",
   "properties": {
     "descriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
