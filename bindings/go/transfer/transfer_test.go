@@ -276,6 +276,7 @@ func TestBuildGraphDefinition_SameComponentMultipleTargets(t *testing.T) {
 }
 
 func TestBuildGraphDefinition_FromRepository(t *testing.T) {
+	sourceSpec := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
 	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
@@ -289,7 +290,7 @@ func TestBuildGraphDefinition_FromRepository(t *testing.T) {
 		WithTransfer(
 			Component("ocm.software/test", "1.0.0"),
 			ToRepositorySpec(targetRepo),
-			FromRepository(mockRepo),
+			FromRepository(mockRepo, sourceSpec),
 		),
 	)
 	require.NoError(t, err)
@@ -327,7 +328,7 @@ func TestBuildGraphDefinition_WithTransferFromLister(t *testing.T) {
 	})
 
 	tgd, err := BuildGraphDefinition(t.Context(),
-		WithTransferFromLister(lister, targetRepo, resolver),
+		WithTransfer(FromLister(lister), ToRepositorySpec(targetRepo), FromResolver(resolver)),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tgd)
@@ -475,7 +476,7 @@ func TestBuildGraphDefinition_EmptyListerResult(t *testing.T) {
 	})
 
 	_, err := BuildGraphDefinition(t.Context(),
-		WithTransferFromLister(lister, targetRepo, resolver),
+		WithTransfer(FromLister(lister), ToRepositorySpec(targetRepo), FromResolver(resolver)),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no components")

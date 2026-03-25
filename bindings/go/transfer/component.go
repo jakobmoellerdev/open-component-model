@@ -22,15 +22,15 @@ func (c ComponentID) String() string {
 	return c.Component + ":" + c.Version
 }
 
-// ComponentLister enumerates component versions to be transferred.
+// ComponentVersionLister enumerates component versions to be transferred.
 // Implementations may list from a CTF, a registry catalog, a file, etc.
-type ComponentLister interface {
+type ComponentVersionLister interface {
 	// ListComponentVersions calls fn with batches of component versions to transfer.
 	// Iteration stops when fn returns an error or all components have been listed.
 	ListComponentVersions(ctx context.Context, fn func(ids []ComponentID) error) error
 }
 
-// ComponentListerFunc adapts a function to the [ComponentLister] interface.
+// ComponentListerFunc adapts a function to the [ComponentVersionLister] interface.
 type ComponentListerFunc func(ctx context.Context, fn func(ids []ComponentID) error) error
 
 // ListComponentVersions calls the underlying function.
@@ -45,7 +45,7 @@ type Mapping struct {
 
 	// ComponentLister dynamically enumerates source component versions.
 	// Cannot be combined with Components.
-	ComponentLister ComponentLister
+	ComponentLister ComponentVersionLister
 
 	// Target is the target repository specification.
 	Target runtime.Typed
@@ -71,6 +71,14 @@ func ToRepositorySpec(target runtime.Typed) TransferOption {
 	}
 }
 
+// FromLister sets a dynamic lister as the source for a transfer mapping.
+// Cannot be combined with [Component] in the same [WithTransfer] call.
+func FromLister(lister ComponentVersionLister) TransferOption {
+	return func(m *Mapping) {
+		m.ComponentLister = lister
+	}
+}
+
 // FromResolver sets an explicit resolver for this mapping's source components.
 func FromResolver(r resolvers.ComponentVersionRepositoryResolver) TransferOption {
 	return func(m *Mapping) {
@@ -78,17 +86,19 @@ func FromResolver(r resolvers.ComponentVersionRepositoryResolver) TransferOption
 	}
 }
 
-// FromRepository wraps a [repository.ComponentVersionRepository] in a simple resolver
-// and sets it on the mapping. This is a convenience for simple single-repository sources.
-func FromRepository(repo repository.ComponentVersionRepository) TransferOption {
+// FromRepository wraps a [repository.ComponentVersionRepository] and its specification in a
+// simple resolver and sets it on the mapping. The repoSpec is needed so that the graph builder
+// can determine the correct transformation types (OCI vs CTF) for resource get/add operations.
+func FromRepository(repo repository.ComponentVersionRepository, repoSpec runtime.Typed) TransferOption {
 	return func(m *Mapping) {
-		m.Resolver = &repoResolver{repo: repo}
+		m.Resolver = &repoResolver{repo: repo, spec: repoSpec}
 	}
 }
 
 // repoResolver wraps a single ComponentVersionRepository as a ComponentVersionRepositoryResolver.
 type repoResolver struct {
 	repo repository.ComponentVersionRepository
+	spec runtime.Typed
 }
 
 func (r *repoResolver) GetComponentVersionRepositoryForComponent(_ context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
@@ -100,9 +110,7 @@ func (r *repoResolver) GetComponentVersionRepositoryForSpecification(_ context.C
 }
 
 func (r *repoResolver) GetRepositorySpecificationForComponent(_ context.Context, _, _ string) (runtime.Typed, error) {
-	// The source repo spec will be determined by the resolver used during discovery.
-	// For a simple repo wrapper, we return nil — the internal resolver handles this.
-	return nil, nil
+	return r.spec, nil
 }
 
 var _ resolvers.ComponentVersionRepositoryResolver = (*repoResolver)(nil)
