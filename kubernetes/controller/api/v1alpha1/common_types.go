@@ -1,13 +1,24 @@
 package v1alpha1
 
 import (
-	"github.com/fluxcd/pkg/apis/meta"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// NamespacedObjectKindReference is a reference to a namespaced object including its kind.
+type NamespacedObjectKindReference struct {
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+	// +optional
+	Kind string `json:"kind,omitempty"`
+	// +required
+	Name string `json:"name,omitempty"`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
 
 type ConfigurationPolicy string
 
@@ -25,7 +36,7 @@ type OCMConfiguration struct {
 	// ocm config data (in the ocm config file format), or other configurable
 	// ocm api objects (Repository, Component, Resource) to
 	// reuse their propagated configuration.
-	meta.NamespacedObjectKindReference `json:",inline"`
+	NamespacedObjectKindReference `json:",inline"`
 	// Policy affects the propagation behavior of the configuration. If set to
 	// ConfigurationPolicyPropagate other ocm api objects can reference this
 	// object to reuse this configuration.
