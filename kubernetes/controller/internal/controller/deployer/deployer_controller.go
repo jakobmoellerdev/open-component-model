@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,7 +35,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	applyv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1/applyconfiguration/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyconfiguration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
@@ -289,12 +290,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	old := deployer.DeepCopy()
 	defer func(ctx context.Context) {
 		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
-		if !equality.Semantic.DeepEqual(deployer.Status, old.Status) {
-			err = errors.Join(err, r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old)))
-		}
+		err = errors.Join(err, r.GetClient().Status().Apply(ctx, ReconcileFinalizeApply(deployer),
+			client.FieldOwner("ocm.software/deployer-controller"), client.ForceOwnership),
+		)
 	}(ctx)
 
 	if deployer.Spec.Suspend {
@@ -985,4 +985,14 @@ func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *d
 			deployer.Status.Deployed[idx] = ref
 		}
 	}
+}
+
+func ReconcileFinalizeApply(deployer *deliveryv1alpha1.Deployer) *applyv1alpha1.DeployerApplyConfiguration {
+	return applyv1alpha1.Deployer(deployer.GetName(), deployer.GetNamespace()).
+		WithStatus(applyv1alpha1.DeployerStatus().
+			WithObservedGeneration(deployer.Status.ObservedGeneration).
+			WithConditions(applyconfiguration.ConditionsToApplyConfig(deployer.Status.Conditions...)...).
+			WithEffectiveOCMConfig(applyconfiguration.OCMConfigToApplyConfig(deployer.Status.EffectiveOCMConfig...)...).
+			WithDeployed(applyconfiguration.DeployedToApplyConfig(deployer.Status.Deployed...)...),
+		)
 }

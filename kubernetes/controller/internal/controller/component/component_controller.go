@@ -11,6 +11,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +30,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	applyv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1/applyconfiguration/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyconfiguration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -171,12 +174,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	old := component.DeepCopy()
 	defer func(ctx context.Context) {
 		status.UpdateBeforePatch(component, r.EventRecorder, component.GetRequeueAfter(), err)
-		if !equality.Semantic.DeepEqual(component.Status, old.Status) {
-			err = errors.Join(err, r.GetClient().Status().Patch(ctx, component, client.MergeFrom(old)))
-		}
+		err = errors.Join(err, r.GetClient().Status().Apply(ctx, ReconcileFinalizeApply(component),
+			client.FieldOwner("ocm.software/component-controller"), client.ForceOwnership),
+		)
 	}(ctx)
 
 	if !component.GetDeletionTimestamp().IsZero() {
@@ -413,4 +415,26 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 	default:
 		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
 	}
+}
+
+func ReconcileFinalizeApply(component *v1alpha1.Component) *applyv1alpha1.ComponentApplyConfiguration {
+	cfg := applyv1alpha1.ComponentStatus().
+		WithObservedGeneration(component.Status.ObservedGeneration).
+		WithConditions(applyconfiguration.ConditionsToApplyConfig(component.Status.Conditions...)...).
+		WithEffectiveOCMConfig(applyconfiguration.OCMConfigToApplyConfig(component.Status.EffectiveOCMConfig...)...)
+
+	info := applyv1alpha1.ComponentInfo().
+		WithComponent(component.Status.Component.Component).
+		WithVersion(component.Status.Component.Version)
+	if component.Status.Component.RepositorySpec != nil {
+		info = info.WithRepositorySpec(*component.Status.Component.RepositorySpec)
+	} else {
+		info = info.WithRepositorySpec(v1.JSON{})
+	}
+	if component.Status.Component.Digest != nil {
+		info = info.WithDigest(*component.Status.Component.Digest)
+	}
+	cfg = cfg.WithComponent(info)
+
+	return applyv1alpha1.Component(component.GetName(), component.GetNamespace()).WithStatus(cfg)
 }

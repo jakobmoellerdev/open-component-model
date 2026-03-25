@@ -17,6 +17,20 @@ var (
 
 const KindComponent = "Component"
 
+// Component is the Schema for the components API.
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
+// +kubebuilder:ac:generate=true
+type Component struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   ComponentSpec   `json:"spec"`
+	Status ComponentStatus `json:"status,omitempty"`
+}
+
 // ComponentSpec defines the desired state of Component.
 type ComponentSpec struct {
 	// RepositoryRef is a reference to a Repository.
@@ -89,19 +103,6 @@ type ComponentStatus struct {
 	// in the order the configuration data was applied.
 	// +optional
 	EffectiveOCMConfig []OCMConfiguration `json:"effectiveOCMConfig,omitempty"`
-}
-
-// Component is the Schema for the components API.
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
-type Component struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   ComponentSpec   `json:"spec"`
-	Status ComponentStatus `json:"status,omitempty"`
 }
 
 // GetConditions returns the conditions of the Component.

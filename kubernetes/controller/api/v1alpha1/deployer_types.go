@@ -9,6 +9,21 @@ import (
 
 const KindDeployer = "Deployer"
 
+// Deployer is the Schema for the deployers API.
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:ac:generate=true
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Deployer is Ready",priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Deployer"
+type Deployer struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   DeployerSpec   `json:"spec,omitempty"`
+	Status DeployerStatus `json:"status,omitempty"`
+}
+
 // DeployerSpec defines the desired state of Deployer.
 type DeployerSpec struct {
 	// ResourceRef is the k8s resource name of an OCM resource containing the ResourceGroupDefinition.
@@ -101,19 +116,6 @@ func (in *Deployer) GetSpecifiedOCMConfig() []OCMConfiguration {
 
 func (in *Deployer) GetEffectiveOCMConfig() []OCMConfiguration {
 	return in.Status.EffectiveOCMConfig
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
-
-// Deployer is the Schema for the deployers API.
-type Deployer struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   DeployerSpec   `json:"spec,omitempty"`
-	Status DeployerStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

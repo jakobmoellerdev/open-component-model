@@ -50,7 +50,7 @@ tasks:
 
   generate:
     deps: [controller-gen]
-    cmd: '"{{.CONTROLLER_GEN}}" object paths="{{ .TASKFILE_DIR }}/..."'
+    cmd: '"{{.CONTROLLER_GEN}}" object applyconfiguration paths="{{ .TASKFILE_DIR }}/..."'
 
   fmt:
     cmd: 'go fmt "{{ .TASKFILE_DIR }}/..."'

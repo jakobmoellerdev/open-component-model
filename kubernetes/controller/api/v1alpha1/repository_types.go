@@ -10,6 +10,20 @@ import (
 
 const KindRepository = "Repository"
 
+// Repository is the Schema for the repositories API.
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
+// +kubebuilder:ac:generate=true
+type Repository struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   RepositorySpec   `json:"spec"`
+	Status RepositoryStatus `json:"status,omitempty"`
+}
+
 // RepositorySpec defines the desired state of Repository.
 type RepositorySpec struct {
 	// RepositorySpec is the config of an ocm repository containing component
@@ -91,19 +105,6 @@ func (in *Repository) GetVID() map[string]string {
 
 func (in *Repository) SetObservedGeneration(v int64) {
 	in.Status.ObservedGeneration = v
-}
-
-// Repository is the Schema for the repositories API.
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
-type Repository struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   RepositorySpec   `json:"spec"`
-	Status RepositoryStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

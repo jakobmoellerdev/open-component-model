@@ -27,7 +27,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	applyv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1/applyconfiguration/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyconfiguration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -175,12 +177,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	old := resource.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(resource, r.EventRecorder, resource.GetRequeueAfter(), err)
-		if !equality.Semantic.DeepEqual(resource.Status, old.Status) {
-			err = errors.Join(err, r.GetClient().Status().Patch(ctx, resource, client.MergeFrom(old)))
-		}
+		status.UpdateBeforePatch(resource, r.EventRecorder, 0, err)
+		err = errors.Join(err, r.GetClient().Status().Apply(ctx, ReconcileFinalizeApply(resource),
+			client.FieldOwner("ocm.software/resource-controller"), client.ForceOwnership),
+		)
 	}(ctx)
 
 	logger.Info("preparing reconciling resource")
@@ -521,4 +522,53 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
+}
+
+func ReconcileFinalizeApply(resource *v1alpha1.Resource) *applyv1alpha1.ResourceApplyConfiguration {
+	cfg := applyv1alpha1.ResourceStatus().
+		WithObservedGeneration(resource.Status.ObservedGeneration).
+		WithConditions(applyconfiguration.ConditionsToApplyConfig(resource.Status.Conditions...)...).
+		WithEffectiveOCMConfig(applyconfiguration.OCMConfigToApplyConfig(resource.Status.EffectiveOCMConfig...)...)
+
+	if resource.Status.Additional != nil {
+		cfg = cfg.WithAdditional(*resource.Status.Additional)
+	}
+
+	if resource.Status.Component != nil {
+		info := applyv1alpha1.ComponentInfo().
+			WithComponent(resource.Status.Component.Component).
+			WithVersion(resource.Status.Component.Version)
+		if resource.Status.Component.RepositorySpec != nil {
+			info = info.WithRepositorySpec(*resource.Status.Component.RepositorySpec)
+		}
+		if resource.Status.Component.Digest != nil {
+			info = info.WithDigest(*resource.Status.Component.Digest)
+		}
+		cfg = cfg.WithComponent(info)
+	}
+
+	if resource.Status.Resource != nil {
+		res := resource.Status.Resource
+		resourceInfo := applyv1alpha1.ResourceInfo().
+			WithName(res.Name).
+			WithType(res.Type).
+			WithVersion(res.Version).
+			WithExtraIdentity(res.ExtraIdentity).
+			WithAccess(res.Access)
+		if res.Digest != nil {
+			resourceInfo = resourceInfo.WithDigest(*res.Digest)
+		}
+		for i := range res.Labels {
+			l := &res.Labels[i]
+			label := applyv1alpha1.Label().
+				WithName(l.Name).
+				WithValue(l.Value).
+				WithVersion(l.Version).
+				WithSigning(l.Signing)
+			resourceInfo = resourceInfo.WithLabels(label)
+		}
+		cfg = cfg.WithResource(resourceInfo)
+	}
+
+	return applyv1alpha1.Resource(resource.GetName(), resource.GetNamespace()).WithStatus(cfg)
 }

@@ -21,6 +21,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	applyv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1/applyconfiguration/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/controller/applyconfiguration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
@@ -103,13 +105,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	old := ocmRepo.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err)
-		if !equality.Semantic.DeepEqual(ocmRepo.Status, old.Status) {
-			logger.Info("updating status")
-			err = errors.Join(err, r.GetClient().Status().Patch(ctx, ocmRepo, client.MergeFrom(old)))
-		}
+		status.UpdateBeforePatch(ocmRepo, r.EventRecorder, 0, err)
+		err = errors.Join(err, r.GetClient().Status().Apply(ctx, ReconcileFinalizeApply(ocmRepo),
+			client.FieldOwner("ocm.software/repository-controller"), client.ForceOwnership),
+		)
 	}(ctx)
 
 	if !ocmRepo.GetDeletionTimestamp().IsZero() {
@@ -236,4 +236,13 @@ func (r *Reconciler) deleteRepository(ctx context.Context, obj *v1alpha1.Reposit
 	)
 
 	return nil
+}
+
+func ReconcileFinalizeApply(repository *v1alpha1.Repository) *applyv1alpha1.RepositoryApplyConfiguration {
+	return applyv1alpha1.Repository(repository.GetName(), repository.GetNamespace()).
+		WithStatus(applyv1alpha1.RepositoryStatus().
+			WithObservedGeneration(repository.Status.ObservedGeneration).
+			WithConditions(applyconfiguration.ConditionsToApplyConfig(repository.Status.Conditions...)...).
+			WithEffectiveOCMConfig(applyconfiguration.OCMConfigToApplyConfig(repository.Status.EffectiveOCMConfig...)...),
+		)
 }
