@@ -23,10 +23,10 @@ import (
 	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/transfer"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/cli/cmd/transfer/component-version/internal"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/render"
@@ -164,9 +164,9 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
 
-	copyMode := internal.CopyModeLocalBlobResources
+	copyMode := transfer.CopyModeLocalBlobResources
 	if copyResources {
-		copyMode = internal.CopyModeAllResources
+		copyMode = transfer.CopyModeAllResources
 	}
 
 	uploadType, err := enum.Get(cmd.Flags(), FlagUploadAs)
@@ -174,23 +174,25 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting upload-as flag failed: %w", err)
 	}
 
-	upTyp := internal.UploadAsDefault
+	upTyp := transfer.UploadAsDefault
 	switch uploadType {
 	case UploadAsLocalBlob.String():
-		upTyp = internal.UploadAsLocalBlob
+		upTyp = transfer.UploadAsLocalBlob
 	case UploadAsOciArtifact.String():
-		upTyp = internal.UploadAsOciArtifact
+		upTyp = transfer.UploadAsOciArtifact
 	}
 
 	// Build TransformationGraphDefinition
-	tgd, err := internal.BuildGraphDefinition(
+	tgd, err := transfer.BuildGraphDefinition(
 		ctx,
-		fromSpec,
-		toSpec,
-		repoProvider,
-		internal.WithRecursive(recursive),
-		internal.WithCopyMode(copyMode),
-		internal.WithUploadType(upTyp),
+		transfer.WithTransfer(
+			transfer.Component(fromSpec.Component, fromSpec.Version),
+			transfer.ToRepositorySpec(toSpec),
+			transfer.FromResolver(repoProvider),
+		),
+		transfer.WithRecursive(recursive),
+		transfer.WithCopyMode(copyMode),
+		transfer.WithUploadType(upTyp),
 	)
 	if err != nil {
 		return fmt.Errorf("building graph definition failed: %w", err)
