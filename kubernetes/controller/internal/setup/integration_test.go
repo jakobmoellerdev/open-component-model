@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +55,7 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 
 	ocmConfigs := []v1alpha1.OCMConfiguration{
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "ConfigMap",
 				Name: "ocm-config",
 			},
@@ -178,13 +177,13 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 	// Load both configurations
 	ocmConfigs := []v1alpha1.OCMConfiguration{
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "Secret",
 				Name: "ocm-creds",
 			},
 		},
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "ConfigMap",
 				Name: "ocm-plugins",
 			},
@@ -214,7 +213,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 
 		ocmConfigs := []v1alpha1.OCMConfiguration{
 			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 					Kind: "ConfigMap",
 					Name: "missing-config",
 				},
@@ -372,7 +371,7 @@ func TestIntegration_ResolverProvider(t *testing.T) {
 
 	ocmConfigs := []v1alpha1.OCMConfiguration{
 		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				Kind: "ConfigMap",
 				Name: "ocm-config-with-resolvers",
 			},
