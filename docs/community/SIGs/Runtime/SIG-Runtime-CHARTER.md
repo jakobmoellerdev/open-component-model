@@ -102,6 +102,33 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 ---
 
+## Community Repository Oversight
+
+SIG Runtime is the designated approver for all projects submitted to
+[`github.com/open-component-model/community`](https://github.com/open-component-model/community).
+
+### Responsibilities
+
+- Review and approve (or reject) new `projects/<name>/` submissions via PR
+- At least one of Chair or Tech Lead MUST approve any new project submission
+- Conduct quarterly health checks on active community projects
+- Archive projects inactive for 6+ months (consistent with SIG lifecycle rules)
+
+### Decision Authority
+
+- Routine submissions: any single SIG Runtime Voting Member may approve
+- Archiving: consensus of Voting Members + TSC notification
+- Removal: 2/3 supermajority of Voting Members + TSC notification
+
+### Process Reference
+
+- [
+  `github.com/open-component-model/community/GOVERNANCE.md`](https://github.com/open-component-model/community/blob/main/GOVERNANCE.md)
+- [
+  `github.com/open-component-model/community/CONTRIBUTING.md`](https://github.com/open-component-model/community/blob/main/CONTRIBUTING.md)
+
+---
+
 ## Operating Model
 
 > Unless otherwise specified here, processes follow the **OCM SIG Handbook** (decision-making, conflict resolution, escalation).

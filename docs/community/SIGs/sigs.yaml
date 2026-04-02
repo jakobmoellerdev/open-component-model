@@ -14,11 +14,12 @@ sigs:
         github: @fabianburth
     meeting:
       cadence: no regular SIG meetings, but participation in monthly community meetings
-      url: 
+      url: https://ocm.software/community/engagement/#special-interest-groups-sigs
       notes: https://github.com/open-component-model/open-component-model/tree/main/community/docs/SIGs/Runtime/meeting-notes
     communication:
       mailing_list: open-component-model-sig-runtime@lists.neonephos.org
       zulip: https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support
     repositories:
       - https://github.com/open-component-model/open-component-model
+      - https://github.com/open-component-model/community
     status: active
