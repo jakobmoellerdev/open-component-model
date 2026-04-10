@@ -1,27 +1,15 @@
-// Package examples is a guided tour of the OCM Go bindings.
+// Package examples contains runnable usage examples for the OCM Go bindings.
 //
-// It walks you through the core concepts of the Open Component Model, starting
-// from the most basic building block (binary data) and progressively building
-// up to complete workflows involving repositories, signing, and OCI registries.
+// Each test function demonstrates a specific use case and serves as both
+// documentation and a regression test. Examples are organized by topic:
 //
-// The tour is organized as numbered test files that should be read in order:
+//   - blob_test.go: Creating and reading binary data with the blob abstraction
+//   - descriptor_test.go: Building component descriptors with resources, sources, and references
+//   - credentials_test.go: Resolving credentials by identity
+//   - signing_test.go: Generating and verifying component descriptor digests, RSA signing and verification
+//   - repository_test.go: Storing and retrieving component versions in a CTF-backed OCI repository
+//   - oci_test.go: Full OCI registry round-trips using testcontainers (skipped with -short)
 //
-//  1. [01_blob_test.go] — Binary data: creating, reading, and copying blobs
-//  2. [02_descriptor_test.go] — Component descriptors: the metadata model
-//  3. [03_credentials_test.go] — Credential resolution by identity
-//  4. [04_repository_test.go] — Storing and retrieving component versions
-//  5. [05_signing_test.go] — Digests, RSA signing, and verification
-//  6. [06_oci_test.go] — Full OCI registry round-trips (requires Docker)
-//  7. [07_transfer_test.go] — Transferring component versions between repositories
-//
-// Every example is a runnable test. Run them all with:
-//
-//	task bindings/go/examples:test
-//
-// Or run a single step:
-//
-//	cd bindings/go/examples && go test -run TestExample_InMemoryBlob -v
-//
-// All examples (except Step 6) are self-contained and use in-memory or
-// temporary filesystem backends, so they run without external services.
+// All examples are self-contained and use in-memory or temporary filesystem backends,
+// so they run without external services.
 package examples
