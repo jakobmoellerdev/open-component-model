@@ -6,7 +6,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -63,7 +63,7 @@ func (t *TransferOCIArtifact) Transform(ctx context.Context, step runtime.Typed)
 	}
 
 	// Try streaming path
-	streamingRepo, ok := t.Repository.(oci.StreamingResourceRepository)
+	streamingRepo, ok := t.Repository.(ocistream.Repository)
 	if !ok {
 		return nil, fmt.Errorf("repository does not support streaming transfers")
 	}

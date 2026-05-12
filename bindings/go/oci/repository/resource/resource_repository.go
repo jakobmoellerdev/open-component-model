@@ -19,6 +19,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -270,9 +271,9 @@ func createRepository(
 	return repo, err
 }
 
-var _ oci.StreamingResourceRepository = (*ResourceRepository)(nil)
+var _ ocistream.Repository = (*ResourceRepository)(nil)
 
-func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (oci.ResourceStream, error) {
+func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (ocistream.ResourceStream, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
@@ -306,7 +307,7 @@ func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resourc
 	}
 }
 
-func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream oci.ResourceStream, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream ocistream.ResourceStream, credentials map[string]string) (*descriptor.Resource, error) {
 	t := resource.Access.GetType()
 	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {

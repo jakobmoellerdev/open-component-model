@@ -40,6 +40,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -876,7 +877,7 @@ func (repo *Repository) AddComponentVersionAlias(ctx context.Context, component,
 
 // DownloadResourceStream returns a lazy ResourceStream for the given resource.
 // No data is downloaded — content streams on demand via Fetch calls.
-func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descriptor.Resource) (ResourceStream, error) {
+func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descriptor.Resource) (ocistream.ResourceStream, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
@@ -884,7 +885,7 @@ func (repo *Repository) DownloadResourceStream(ctx context.Context, res *descrip
 	return repo.downloadStream(ctx, res.Access)
 }
 
-func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed) (ResourceStream, error) {
+func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed) (ocistream.ResourceStream, error) {
 	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("error creating resource access: %w", err)
@@ -924,7 +925,7 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}
 
-		return newResourceStream(src, desc, repo.resourceCopyOptions.CopyGraphOptions, repo.tempDir, []string{typed.ImageReference}), nil
+		return ocistream.New(src, desc, repo.resourceCopyOptions.CopyGraphOptions, repo.tempDir, []string{typed.ImageReference}), nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
@@ -932,7 +933,7 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 
 // UploadResourceStream streams content from a ResourceStream directly into the repository
 // using oras.CopyGraph. No tar materialization occurs.
-func (repo *Repository) UploadResourceStream(ctx context.Context, res *descriptor.Resource, stream ResourceStream) (*descriptor.Resource, error) {
+func (repo *Repository) UploadResourceStream(ctx context.Context, res *descriptor.Resource, rs ocistream.ResourceStream) (*descriptor.Resource, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
 	var access accessv1.OCIImage
@@ -945,7 +946,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, err
 	}
 
-	if err := oras.CopyGraph(ctx, stream, store, stream.Root(), repo.resourceCopyOptions.CopyGraphOptions); err != nil {
+	if err := oras.CopyGraph(ctx, rs, store, rs.Root(), repo.resourceCopyOptions.CopyGraphOptions); err != nil {
 		return nil, fmt.Errorf("failed to stream resource via copy: %w", err)
 	}
 
@@ -957,7 +958,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		return nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
 	}
 
-	if err := store.Tag(ctx, stream.Root(), ref.Tag); err != nil {
+	if err := store.Tag(ctx, rs.Root(), ref.Tag); err != nil {
 		return nil, fmt.Errorf("failed to tag artifact with tag %q: %w", ref.Tag, err)
 	}
 
