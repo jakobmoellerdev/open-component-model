@@ -1,4 +1,4 @@
-package oci
+package stream
 
 import (
 	"bytes"
@@ -23,9 +23,9 @@ func TestOCIResourceStream_Fetch(t *testing.T) {
 	layerContent := []byte("hello layer")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	stream := newResourceStream(store, layerDesc, oras.DefaultCopyGraphOptions, "", nil)
+	s := New(store, layerDesc, oras.DefaultCopyGraphOptions, "", nil)
 
-	rc, err := stream.Fetch(ctx, layerDesc)
+	rc, err := s.Fetch(ctx, layerDesc)
 	require.NoError(t, err)
 	defer rc.Close()
 
@@ -41,9 +41,9 @@ func TestOCIResourceStream_Exists(t *testing.T) {
 	layerContent := []byte("exists check")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	stream := newResourceStream(store, layerDesc, oras.DefaultCopyGraphOptions, "", nil)
+	s := New(store, layerDesc, oras.DefaultCopyGraphOptions, "", nil)
 
-	exists, err := stream.Exists(ctx, layerDesc)
+	exists, err := s.Exists(ctx, layerDesc)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
@@ -52,7 +52,7 @@ func TestOCIResourceStream_Exists(t *testing.T) {
 		Digest:    digest.FromString("missing"),
 		Size:      7,
 	}
-	exists, err = stream.Exists(ctx, missingDesc)
+	exists, err = s.Exists(ctx, missingDesc)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -65,23 +65,20 @@ func TestOCIResourceStream_Root(t *testing.T) {
 		Size:      4,
 	}
 
-	stream := newResourceStream(store, desc, oras.DefaultCopyGraphOptions, "", nil)
-	assert.Equal(t, desc, stream.Root())
+	s := New(store, desc, oras.DefaultCopyGraphOptions, "", nil)
+	assert.Equal(t, desc, s.Root())
 }
 
 func TestOCIResourceStream_Materialize(t *testing.T) {
 	ctx := context.Background()
 	store := memory.New()
 
-	// Push a config blob
 	configContent := []byte("{}")
 	configDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageConfig, configContent)
 
-	// Push a layer blob
 	layerContent := []byte("layer data for materialize test")
 	layerDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageLayer, layerContent)
 
-	// Push a manifest
 	manifest := ocispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispec.MediaTypeImageManifest,
@@ -92,9 +89,9 @@ func TestOCIResourceStream_Materialize(t *testing.T) {
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageManifest, manifestBytes)
 
-	stream := newResourceStream(store, manifestDesc, oras.DefaultCopyGraphOptions, t.TempDir(), nil)
+	s := New(store, manifestDesc, oras.DefaultCopyGraphOptions, t.TempDir(), nil)
 
-	blob, err := stream.Materialize(ctx)
+	blob, err := s.Materialize(ctx)
 	require.NoError(t, err)
 
 	rc, err := blob.ReadCloser()
@@ -111,15 +108,12 @@ func TestOCIResourceStream_CopyGraph(t *testing.T) {
 	srcStore := memory.New()
 	dstStore := memory.New()
 
-	// Push a config blob
 	configContent := []byte("{}")
 	configDesc := pushBlob(t, ctx, srcStore, ocispec.MediaTypeImageConfig, configContent)
 
-	// Push a layer blob
 	layerContent := []byte("streaming layer data")
 	layerDesc := pushBlob(t, ctx, srcStore, ocispec.MediaTypeImageLayer, layerContent)
 
-	// Push a manifest
 	manifest := ocispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispec.MediaTypeImageManifest,
@@ -130,13 +124,11 @@ func TestOCIResourceStream_CopyGraph(t *testing.T) {
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, srcStore, ocispec.MediaTypeImageManifest, manifestBytes)
 
-	// Create stream from source and copy to destination
-	stream := newResourceStream(srcStore, manifestDesc, oras.DefaultCopyGraphOptions, "", nil)
+	s := New(srcStore, manifestDesc, oras.DefaultCopyGraphOptions, "", nil)
 
-	err = oras.CopyGraph(ctx, stream, dstStore, stream.Root(), oras.DefaultCopyGraphOptions)
+	err = oras.CopyGraph(ctx, s, dstStore, s.Root(), oras.DefaultCopyGraphOptions)
 	require.NoError(t, err)
 
-	// Verify all blobs exist in destination
 	exists, err := dstStore.Exists(ctx, manifestDesc)
 	require.NoError(t, err)
 	assert.True(t, exists, "manifest should exist in destination")
@@ -149,7 +141,6 @@ func TestOCIResourceStream_CopyGraph(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, exists, "layer should exist in destination")
 
-	// Verify layer content matches
 	rc, err := dstStore.Fetch(ctx, layerDesc)
 	require.NoError(t, err)
 	defer rc.Close()
