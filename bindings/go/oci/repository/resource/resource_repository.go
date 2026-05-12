@@ -269,3 +269,73 @@ func createRepository(
 	repo, err := oci.NewRepository(options...)
 	return repo, err
 }
+
+var _ oci.StreamingResourceRepository = (*ResourceRepository)(nil)
+
+func (p *ResourceRepository) DownloadResourceStream(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (oci.ResourceStream, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	switch access := obj.(type) {
+	case *v1.OCIImage:
+		baseURL, err := ociImageAccessToBaseURL(access)
+		if err != nil {
+			return nil, fmt.Errorf("error creating oci image access: %w", err)
+		}
+
+		repo, err := p.getRepository(&ociv1.Repository{
+			BaseUrl: baseURL,
+		}, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error creating repository: %w", err)
+		}
+
+		stream, err := repo.DownloadResourceStream(ctx, resource)
+		if err != nil {
+			return nil, fmt.Errorf("error creating resource stream: %w", err)
+		}
+
+		return stream, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %s for streaming download", t)
+	}
+}
+
+func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource *descriptor.Resource, stream oci.ResourceStream, credentials map[string]string) (*descriptor.Resource, error) {
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	switch access := obj.(type) {
+	case *v1.OCIImage:
+		baseURL, err := ociImageAccessToBaseURL(access)
+		if err != nil {
+			return nil, fmt.Errorf("error creating oci image access: %w", err)
+		}
+
+		repo, err := p.getRepository(&ociv1.Repository{
+			BaseUrl: baseURL,
+		}, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error creating repository: %w", err)
+		}
+
+		res, err := repo.UploadResourceStream(ctx, resource, stream)
+		if err != nil {
+			return nil, fmt.Errorf("error streaming resource upload: %w", err)
+		}
+
+		return res, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %s for streaming upload", t)
+	}
+}
