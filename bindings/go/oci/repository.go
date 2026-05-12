@@ -747,63 +747,13 @@ func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Sour
 }
 
 // download downloads an artifact specified by an access from the repository into a blob.ReadOnlyBlob.
-// It is expected that the access is
-//   - a valid [accessv1.OCIImage], or
-//   - a [v2.LocalBlob] access that has a [v2.LocalBlob.GlobalAccess] set that can be interpreted as [accessv1.OCIImage].
+// It delegates to downloadStream and materializes the result into a tar-based OCI layout blob.
 func (repo *Repository) download(ctx context.Context, access runtime.Typed) (data blob.ReadOnlyBlob, err error) {
-	typed, err := repo.scheme.NewObject(access.GetType())
+	stream, err := repo.downloadStream(ctx, access)
 	if err != nil {
-		return nil, fmt.Errorf("error creating resource access: %w", err)
+		return nil, err
 	}
-	if err := repo.scheme.Convert(access, typed); err != nil {
-		return nil, fmt.Errorf("error converting resource access: %w", err)
-	}
-
-	switch typed := typed.(type) {
-	case *v2.LocalBlob:
-		if typed.GlobalAccess == nil {
-			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")
-		}
-
-		globalAccess, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
-		if err != nil {
-			return nil, fmt.Errorf("error creating typed global blob access with help of scheme: %w", err)
-		}
-		if err := repo.scheme.Convert(typed.GlobalAccess, globalAccess); err != nil {
-			return nil, fmt.Errorf("error converting global blob access: %w", err)
-		}
-		return repo.download(ctx, globalAccess)
-	case *accessv1.OCIImage:
-		src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
-		if err != nil {
-			return nil, err
-		}
-
-		resolved, err := looseref.ParseReference(typed.ImageReference)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
-		}
-
-		reference := resolved.ReferenceOrTag()
-
-		desc, err := src.Resolve(ctx, reference)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
-		}
-
-		downloaded, err := tar.CopyToOCILayoutInMemory(ctx, src, desc, tar.CopyToOCILayoutOptions{
-			CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-			Tags:             []string{typed.ImageReference},
-			TempDir:          repo.tempDir,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to copy to OCI layout: %w", err)
-		}
-
-		return downloaded, nil
-	default:
-		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
-	}
+	return stream.Materialize(ctx)
 }
 
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
