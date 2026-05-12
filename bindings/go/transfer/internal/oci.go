@@ -15,6 +15,11 @@ import (
 )
 
 func processOCIArtifact(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, uploadAsOCIArtifact bool) error {
+	// When uploading as OCI artifact, use the streaming transfer path
+	if uploadAsOCIArtifact {
+		return processOCIArtifactStreaming(resource, id, val, tgd, toSpec, resourceTransformIDs, i)
+	}
+
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 
@@ -177,4 +182,62 @@ func ociUploadAsArtifact(toSpec runtime.Typed, addResourceID string, getResource
 		}},
 	}
 	return addResourceTransform, nil
+}
+
+// processOCIArtifactStreaming emits a single TransferOCIArtifact node that streams
+// the OCI artifact directly from source to target without tar materialization.
+func processOCIArtifactStreaming(resource descriptorv2.Resource, id string, _ *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
+	resourceIdentity := resource.ToIdentity()
+	resourceID := identityToTransformationID(resourceIdentity)
+	transferID := fmt.Sprintf("%sTransfer%s", id, resourceID)
+
+	var ociAccess ociv1.OCIImage
+	if err := json.Unmarshal(resource.Access.Data, &ociAccess); err != nil {
+		return fmt.Errorf("cannot unmarshal OCI access: %w", err)
+	}
+
+	referenceName, err := getReferenceName(ociAccess.ImageReference)
+	if err != nil {
+		return fmt.Errorf("cannot get reference name: %w", err)
+	}
+
+	var ociSpec ocirepo.Repository
+	if err := scheme.Convert(toSpec, &ociSpec); err != nil {
+		return fmt.Errorf("cannot convert target spec to OCI repository: %w", err)
+	}
+	targetRepoBaseURL := ociSpec.BaseUrl
+	if ociSpec.SubPath != "" {
+		targetRepoBaseURL = targetRepoBaseURL + "/" + ociSpec.SubPath
+	}
+	targetImageReference := targetRepoBaseURL + "/" + referenceName
+
+	unstructured, err := runtime.UnstructuredFromMixedData(map[string]any{
+		"resource": resource,
+		"targetResource": map[string]any{
+			"name":     resource.Name,
+			"version":  resource.Version,
+			"type":     resource.Type,
+			"relation": resource.Relation,
+			"access": map[string]any{
+				"type":           runtime.NewVersionedType(ociv1.LegacyType, ociv1.LegacyTypeVersion).String(),
+				"imageReference": targetImageReference,
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("cannot create unstructured spec for TransferOCIArtifact transformation: %w", err)
+	}
+
+	transferTransform := transformv1alpha1.GenericTransformation{
+		TransformationMeta: meta.TransformationMeta{
+			Type: ociv1alpha1.TransferOCIArtifactV1alpha1,
+			ID:   transferID,
+		},
+		Spec: unstructured,
+	}
+	tgd.Transformations = append(tgd.Transformations, transferTransform)
+
+	resourceTransformIDs[i] = transferID
+
+	return nil
 }
