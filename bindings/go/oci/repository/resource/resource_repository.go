@@ -99,6 +99,16 @@ func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, err
 	}
 	resource = resource.DeepCopy()
+	// Resolve raw access to typed access so the inner repository can type-switch on it.
+	t := resource.Access.GetType()
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	resource.Access = obj
 	resource, err = repo.ProcessResourceDigest(ctx, resource)
 	if err != nil {
 		return nil, fmt.Errorf("error processing resource digest: %w", err)
