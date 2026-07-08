@@ -1,0 +1,39 @@
+components:
+  - name: ocm.software/ocm/cli
+    version: "${VERSION}"
+    provider:
+      name: ocm.software
+    resources:
+      - name: image
+        type: ociImage
+        access:
+          type: ociArtifact
+          imageReference: "${CLI_IMAGE}@${CLI_IMAGE_DIGEST}"
+
+  - name: ocm.software/ocm/controller
+    version: "${VERSION}"
+    provider:
+      name: ocm.software
+    resources:
+      - name: image
+        type: ociImage
+        access:
+          type: ociArtifact
+          imageReference: "${CONTROLLER_IMAGE}@${CONTROLLER_IMAGE_DIGEST}"
+      - name: helm-chart
+        type: helmChart
+        access:
+          type: ociArtifact
+          imageReference: "${CONTROLLER_CHART}@${CONTROLLER_CHART_DIGEST}"
+
+  - name: ocm.software/ocm
+    version: "${VERSION}"
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: cli
+        componentName: ocm.software/ocm/cli
+        version: "${VERSION}"
+      - name: controller
+        componentName: ocm.software/ocm/controller
+        version: "${VERSION}"
