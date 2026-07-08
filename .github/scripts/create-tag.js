@@ -48,9 +48,9 @@ export function resolveTagCommit(tag, execGit = defaultExecGit) {
  */
 export function createAndPushTag({ tag, commit, message, execGit = defaultExecGit }) {
   if (commit === "HEAD") {
-    execGit(["tag", "-s", tag, "-m", message]);
+    execGit(["tag", "-a", tag, "-m", message]);
   } else {
-    execGit(["tag", "-s", tag, commit, "-m", message]);
+    execGit(["tag", "-a", tag, commit, "-m", message]);
   }
   execGit(["push", "origin", `refs/tags/${tag}`]);
 }

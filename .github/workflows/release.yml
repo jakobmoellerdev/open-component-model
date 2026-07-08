@@ -152,25 +152,12 @@ jobs:
     outputs:
       pushed: ${{ steps.tag.outputs.pushed }}
     steps:
-      - name: Generate App Token
-        id: get_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          # Push the RC tags (canonical + cli/controller side tags).
-          permission-contents: write
-
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ github.ref_name }}
-          token: ${{ steps.get_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-tags: true
-          # persist-credentials kept (intentionally) — create-tag.js does
-          # `git push origin refs/tags/...` which needs the app token persisted
-          # in .git/config to authenticate. Zizmor flags this; accepted.
 
       - name: Setup git config
         env:
@@ -179,14 +166,6 @@ jobs:
           git config --global user.name "$GIT_USER"
           git config --global user.email "$GIT_USER@users.noreply.github.com"
 
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_FOR_SIGNING }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_tag_gpgsign: true
-
       - name: Create RC tags (canonical + cli + controller side tags)
         id: tag
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -194,7 +173,7 @@ jobs:
           CANONICAL_TAG: ${{ needs.prepare.outputs.new_tag }}
           ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_rc_tag }},${{ needs.prepare.outputs.controller_module_rc_tag }}
         with:
-          github-token: ${{ steps.get_token.outputs.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
             await script.createRcTags({ core });
@@ -409,26 +388,13 @@ jobs:
             echo "CONTROLLER_CHART=ghcr.io/$OWNER/kubernetes/controller/chart"
           } >> "$GITHUB_ENV"
 
-      - name: Generate App Token
-        id: get_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          # Push the final/promotion tags (canonical + cli/controller/website side tags).
-          permission-contents: write
-
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
-          token: ${{ steps.get_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-tags: true
-          # persist-credentials kept (intentionally) — create-tag.js does
-          # `git push origin refs/tags/...` which needs the app token persisted
-          # in .git/config to authenticate. Zizmor flags this; accepted.
 
       - name: Setup git config
         env:
@@ -437,14 +403,6 @@ jobs:
           git config --global user.name "$GIT_USER"
           git config --global user.email "$GIT_USER@users.noreply.github.com"
 
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY_FOR_SIGNING }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          git_user_signingkey: true
-          git_tag_gpgsign: true
-
       - name: Create final tags (canonical + cli + controller side tags)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
@@ -452,7 +410,7 @@ jobs:
           NEW_RELEASE_TAG: ${{ needs.prepare.outputs.promotion_tag }}
           ADDITIONAL_TAGS: ${{ needs.prepare.outputs.cli_module_promotion_tag }},${{ needs.prepare.outputs.controller_module_promotion_tag }},${{ needs.prepare.outputs.website_module_promotion_tag }}
         with:
-          github-token: ${{ steps.get_token.outputs.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/create-tag.js');
             await script.createNewReleaseTags({ core });
@@ -718,23 +676,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           exit "$rc"
 
-      - name: Generate App Token
-        id: get_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          # Push the branch and create the signed commit via GraphQL.
-          permission-contents: write
-          # Open the website docs release PR.
-          permission-pull-requests: write
-
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           base: main
-          token: ${{ steps.get_token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           title: "chore(website): release docs version ${{ needs.prepare.outputs.base_version }}"
           commit-message: "[github-actions] automated change"
           add-paths: |
