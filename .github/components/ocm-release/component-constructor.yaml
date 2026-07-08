@@ -6,6 +6,7 @@ components:
     resources:
       - name: image
         type: ociImage
+        version: "${VERSION}"
         access:
           type: ociArtifact
           imageReference: "${CLI_IMAGE}@${CLI_IMAGE_DIGEST}"
@@ -17,11 +18,13 @@ components:
     resources:
       - name: image
         type: ociImage
+        version: "${VERSION}"
         access:
           type: ociArtifact
           imageReference: "${CONTROLLER_IMAGE}@${CONTROLLER_IMAGE_DIGEST}"
       - name: helm-chart
         type: helmChart
+        version: "${VERSION}"
         access:
           type: ociArtifact
           imageReference: "${CONTROLLER_CHART}@${CONTROLLER_CHART_DIGEST}"
