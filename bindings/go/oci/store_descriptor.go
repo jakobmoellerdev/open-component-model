@@ -5,15 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
+	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2desc "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
@@ -214,7 +218,25 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		_ = descriptorRaw.Close()
 	}()
 
-	desc, err := tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
+	// Support both TAR-encoded and raw YAML/JSON descriptors based on media type.
+	var desc *descriptor.Descriptor
+	mediaType := cfg.ComponentDescriptorLayer.MediaType
+	if strings.Contains(mediaType, "+tar") || strings.Contains(mediaType, "tar+") {
+		desc, err = tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
+	} else {
+		// Raw YAML/JSON descriptor (legacy format used by older OCM CLIs)
+		rawBytes, readErr := io.ReadAll(descriptorRaw)
+		if readErr != nil {
+			return nil, nil, nil, fmt.Errorf("failed to read descriptor: %w", readErr)
+		}
+		var v2desc v2desc.Descriptor
+		if err = yaml.Unmarshal(rawBytes, &v2desc); err != nil {
+			// Fallback: try tar decode in case media type is misleading
+			desc, err = tar.SingleFileTARDecodeV2Descriptor(bytes.NewReader(rawBytes))
+		} else {
+			desc, err = descriptor.ConvertFromV2(&v2desc)
+		}
+	}
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}
