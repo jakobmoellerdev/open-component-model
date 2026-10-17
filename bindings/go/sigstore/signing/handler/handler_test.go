@@ -1338,15 +1338,29 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 	}
 }
 
-func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
-	t.Parallel()
+// hangingCosignEnv makes the test binary act as a cosign whose signing never finishes, see TestMain.
+const hangingCosignEnv = "OCM_SIGSTORE_HANDLER_TEST_HANGING_COSIGN"
 
-	// Any existing executable works: the expired deadline stops it from being started.
+func TestMain(m *testing.M) {
+	if os.Getenv(hangingCosignEnv) != "" {
+		if len(os.Args) > 1 && os.Args[1] == "version" {
+			fmt.Println("GitVersion: v99.0.0")
+			os.Exit(0)
+		}
+		time.Sleep(time.Hour)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
+
+func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
+	// Not parallel: the hanging cosign is selected through the environment inherited by the child process.
+	t.Setenv(hangingCosignEnv, "1")
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	h := New(
 		WithLookPath(func(string) (string, error) { return executable, nil }),
-		WithOperationTimeout(time.Nanosecond),
+		WithOperationTimeout(500*time.Millisecond),
 	)
 
 	_, err = h.Sign(
