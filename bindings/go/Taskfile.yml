@@ -11,14 +11,14 @@ tasks:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
     dir: plugin
     cmds:
-      - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
-      - go build -o tmp/testdata/test-plugin-resource internal/testplugin-resource/main.go
-      - go build -o tmp/testdata/test-plugin-input internal/testplugin-input/main.go
-      - go build -o tmp/testdata/test-plugin-digester internal/testplugin-digester/main.go
-      - go build -o tmp/testdata/test-plugin-blobtransformer internal/testplugin-blobtransformer/main.go
-      - go build -o tmp/testdata/test-plugin-signinghandler internal/testplugin-signinghandler/main.go
-      - go build -o tmp/testdata/test-plugin-component-lister internal/testplugin-component-lister/main.go
-      - go build -o tmp/testdata/test-plugin-credential-repository internal/testplugin-credential-repository/main.go
+      - go build -o tmp/testdata/test-plugin-component-version{{exeExt}} internal/testplugin-component-version/main.go
+      - go build -o tmp/testdata/test-plugin-resource{{exeExt}} internal/testplugin-resource/main.go
+      - go build -o tmp/testdata/test-plugin-input{{exeExt}} internal/testplugin-input/main.go
+      - go build -o tmp/testdata/test-plugin-digester{{exeExt}} internal/testplugin-digester/main.go
+      - go build -o tmp/testdata/test-plugin-blobtransformer{{exeExt}} internal/testplugin-blobtransformer/main.go
+      - go build -o tmp/testdata/test-plugin-signinghandler{{exeExt}} internal/testplugin-signinghandler/main.go
+      - go build -o tmp/testdata/test-plugin-component-lister{{exeExt}} internal/testplugin-component-lister/main.go
+      - go build -o tmp/testdata/test-plugin-credential-repository{{exeExt}} internal/testplugin-credential-repository/main.go
 
   test:
     dotenv: ['{{.TASKFILE_DIR}}/../../.env']
