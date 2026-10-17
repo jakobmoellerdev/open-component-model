@@ -296,6 +296,44 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::unit coverage ${pct}% is below the ${floor}% floor"; exit 1; }
 
+  # Native Windows run: the CLI ships windows/{amd64,arm64} binaries, but the
+  # cli.yml matrix only cross-compiles them on Linux, so OS-specific code paths
+  # (file paths, plugin processes, sockets) are otherwise never executed.
+  run_windows:
+    name: "Windows Build and Unit Tests"
+    needs: changes
+    runs-on: windows-latest
+    if: ${{ needs.changes.outputs.run_go == 'true' }}
+    defaults:
+      run:
+        # Task resolves grep/mkdir/mv from PATH; Git Bash provides them.
+        shell: bash
+    steps:
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            bindings/go
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      - name: Build CLI
+        run: task bindings/go/cli:build/single GOOS=windows GOARCH=amd64
+      - name: Smoke test CLI
+        working-directory: bindings/go/cli/tmp/bin
+        run: |
+          cp ocm-windows-amd64 ocm.exe
+          ./ocm.exe version
+      - name: Run Tests
+        run: task bindings/go:test
+
   generate:
     runs-on: ubuntu-26.04-arm
     name: "Code Generation"
@@ -337,6 +375,7 @@ jobs:
       - changes
       - generate
       - run_unit_tests
+      - run_windows
       - run_integration_tests
       - golangci_lint
       - dependency_list_verify
