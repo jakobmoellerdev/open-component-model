@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -24,6 +26,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
 // TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig pins that with an HTTP configuration
@@ -71,6 +74,51 @@ func TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig(t *testing.T) {
 				r.Equal("0.1.0", result.Version)
 			})
 		}
+	}
+}
+
+// TestNewReadOnlyChartFromRemote_HTTPConfigKeepsOCICredentials pins that the registry client built
+// from an HTTP configuration authenticates the OCI chart pull with the resolved credentials.
+func TestNewReadOnlyChartFromRemote_HTTPConfigKeepsOCICredentials(t *testing.T) {
+	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+
+	reg := newChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	target, err := url.Parse(reg.URL)
+	require.NoError(t, err)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = reg.Client().Transport
+	private := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if user, pass, ok := req.BasicAuth(); !ok || user != "user" || pass != "secret" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		proxy.ServeHTTP(w, req)
+	}))
+	t.Cleanup(private.Close)
+	ociRef := "oci://" + strings.TrimPrefix(private.URL, "https://") + "/charts/mychart:0.1.0"
+	httpConfig := WithHTTPConfig(&httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: certPEM(private)}})
+
+	tests := []struct {
+		name    string
+		creds   *ocicredsv1.OCICredentials
+		wantErr string
+	}{
+		{name: "resolved credentials", creds: &ocicredsv1.OCICredentials{Username: "user", Password: "secret"}},
+		{name: "wrong credentials", creds: &ocicredsv1.OCICredentials{Username: "user", Password: "wrong"}, wantErr: "401"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			result, err := NewReadOnlyChartFromRemote(t.Context(), ociRef, t.TempDir(), httpConfig, WithOCICredentials(tc.creds))
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal("mychart", result.Name)
+		})
 	}
 }
 

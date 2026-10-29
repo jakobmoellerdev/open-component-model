@@ -124,7 +124,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	httpClient, indexClient, regClient, err := newClients(opt, caFile)
+	httpClient, indexClient, regClient, err := newClients(opt, caFile, username, password)
 	if err != nil {
 		return nil, err
 	}
@@ -224,9 +224,13 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 // newClients builds the registry client and, with an HTTP configuration, the clients for
 // downloads and for index.yaml. One configuration (per-host routing, timeouts), with the TLS
 // material of the input or credentials overriding its own, then serves the OCI registry
-// client, the OCI chart pull and the HTTP/S getter alike.
-func newClients(opt *option, caFile string) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
+// client, the OCI chart pull and the HTTP/S getter alike. The registry client carries the
+// resolved credentials, because with an HTTP configuration it also performs the OCI chart pull.
+func newClients(opt *option, caFile, username, password string) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
 	var regClientOpts []registry.ClientOption
+	if username != "" && password != "" {
+		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
 	if opt.HTTPConfig != nil {
 		if httpClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig)),
 			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
